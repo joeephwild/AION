@@ -4,13 +4,13 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Calendar, DollarSign, CheckCircle, AlertTriangle, Clock } from "lucide-react";
+import { Calendar, DollarSign, CheckCircle, AlertTriangle, Clock, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import { useState, useEffect } from "react";
 import type { Creator, CalendarEvent } from "@/types";
-import { useActiveAccount } from "thirdweb/react"; // Updated import
+import { useActiveAccount } from "thirdweb/react";
 
 // Mock creator data
 const mockCreator: Creator = {
@@ -22,7 +22,7 @@ const mockCreator: Creator = {
   calendarIntegrations: { google: true, outlook: false },
 };
 
-// Mock availability
+// Mock availability - This would be fetched from the creator's actual calendar in a real app
 const mockAvailability: CalendarEvent[] = [
   { title: 'Available Slot', start: new Date(new Date().setDate(new Date().getDate() + 2) + 9 * 3600000), end: new Date(new Date().setDate(new Date().getDate() + 2) + 10 * 3600000) },
   { title: 'Available Slot', start: new Date(new Date().setDate(new Date().getDate() + 2) + 11 * 3600000), end: new Date(new Date().setDate(new Date().getDate() + 2) + 12 * 3600000) },
@@ -34,7 +34,7 @@ export default function BookingPage() {
   const params = useParams();
   const creatorId = params.creatorId as string; 
   
-  const account = useActiveAccount(); // Use Thirdweb v5 hook
+  const account = useActiveAccount();
   const address = account?.address;
   const isConnected = !!address;
 
@@ -46,10 +46,13 @@ export default function BookingPage() {
 
   useEffect(() => {
     setIsLoading(true);
+    // Simulate fetching creator data
     setTimeout(() => {
-      if (creatorId === 'alex-chen-web3') { 
+      if (creatorId === 'alex-chen-web3') { // Use a mock slug or ID
         setCreator(mockCreator);
       } else {
+        // In a real app, you'd fetch this from a backend/database
+        // For now, handle as "not found" for other IDs
         setCreator(null);
       }
       setIsLoading(false);
@@ -58,8 +61,8 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (isConnected && address && creator) {
-      // Mock token check
-      setHasRequiredToken(true); 
+      // Mock token check: In a real app, query the blockchain for token balance
+      setHasRequiredToken(true); // Assume user has token for mock purposes
     } else {
       setHasRequiredToken(false);
     }
@@ -84,9 +87,10 @@ export default function BookingPage() {
       return;
     }
     setSelectedSlot(slot);
+    // Mock booking confirmation
     toast({
-      title: "Booking Confirmed!",
-      description: `Your session with ${creator.name} on ${slot.start.toLocaleDateString()} at ${slot.start.toLocaleTimeString()} is confirmed. (Mock)`,
+      title: "Booking Confirmed! (Mock)",
+      description: `Your session with ${creator.name} on ${slot.start.toLocaleDateString()} at ${slot.start.toLocaleTimeString()} is confirmed. This is a mock confirmation.`,
     });
   };
   
@@ -167,11 +171,11 @@ export default function BookingPage() {
         <Card className="shadow-xl">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-2xl"><Calendar className="h-7 w-7 text-primary" /> Book a Session</CardTitle>
-            <CardDescription>Select an available time slot from {creator.name || 'the creator'}'s calendar.</CardDescription>
+            <CardDescription>Select an available time slot from {creator.name || 'the creator'}'s calendar. <br /><span className="text-xs text-accent/80 flex items-center mt-1"><Info size={14} className="mr-1"/> Availability shown is for demonstration purposes.</span></CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <h3 className="font-semibold text-lg mb-2">Available Slots:</h3>
+              <h3 className="font-semibold text-lg mb-2">Available Slots (Mock Data):</h3>
               {mockAvailability.length > 0 ? mockAvailability.map((slot, index) => (
                 <Card 
                   key={index} 

@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
-import { PlusCircle, CalendarDays, ListChecks, Settings, ExternalLink, Edit3, Eye, Zap } from "lucide-react";
+import { PlusCircle, CalendarDays, ListChecks, Settings, ExternalLink, Edit3, Eye, Zap, Clock } from "lucide-react";
 import { CalendarConnect } from "@/components/core/calendar-connect";
 import Image from "next/image";
 import type { Token, Booking } from "@/types";
 import { useState, useEffect } from "react";
-import { useActiveAccount } from "thirdweb/react"; // Updated import
+import { useActiveAccount } from "thirdweb/react";
 
 
 const mockTokens: Token[] = [
@@ -25,9 +25,10 @@ const mockBookings: Booking[] = [
 
 
 export default function DashboardPage() {
-  const account = useActiveAccount(); // Use Thirdweb v5 hook
+  const account = useActiveAccount();
   const address = account?.address;
   const isConnected = !!address;
+  const [isLoading, setIsLoading] = useState(true);
 
   const [userTokens, setUserTokens] = useState<Token[]>([]);
   const [userBookings, setUserBookings] = useState<Booking[]>([]);
@@ -37,11 +38,24 @@ export default function DashboardPage() {
       // In a real app, fetch tokens and bookings for the connected user (address)
       setUserTokens(mockTokens); 
       setUserBookings(mockBookings); 
-    } else {
+      setIsLoading(false);
+    } else if (!isConnected) {
+      // if not connected, also stop loading
       setUserTokens([]);
       setUserBookings([]);
+      setIsLoading(false);
     }
   }, [isConnected, address]);
+
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Clock className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2 text-lg text-muted-foreground">Loading dashboard...</p>
+      </div>
+    );
+  }
 
 
   if (!isConnected) {
@@ -122,8 +136,10 @@ export default function DashboardPage() {
             <CalendarConnect />
           </CardContent>
           <CardFooter>
-             <Button variant="outline" className="w-full">
-                <Settings className="mr-2 h-4 w-4" /> Manage Availability
+             <Button variant="outline" className="w-full" asChild>
+                <Link href="/dashboard/availability">
+                  <Settings className="mr-2 h-4 w-4" /> Manage Availability
+                </Link>
             </Button>
           </CardFooter>
         </Card>
