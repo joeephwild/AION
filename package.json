@@ -1,3 +1,4 @@
+
 {
   "name": "aion-app",
   "version": "0.1.0",
@@ -67,5 +68,8 @@
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.4"
+  },
+  "overrides": {
+    "@magic-ext/oauth": "^15.5.0"
   }
 }
