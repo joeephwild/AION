@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
-import { WagmiProvider } from '@/components/providers/wagmi-provider';
+import { ThirdwebProvider } from '@/components/providers/thirdweb-provider'; // Updated provider
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { Toaster } from "@/components/ui/toaster";
@@ -29,14 +29,14 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans flex flex-col min-h-screen`}>
-        <WagmiProvider>
+        <ThirdwebProvider> {/* Updated provider */}
           <Header />
           <main className="flex-grow container mx-auto px-4 py-8">
             {children}
           </main>
           <Footer />
           <Toaster />
-        </WagmiProvider>
+        </ThirdwebProvider>
       </body>
     </html>
   );

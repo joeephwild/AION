@@ -4,12 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Calendar, DollarSign, CheckCircle, AlertTriangle, Clock } from "lucide-react";
-import { useAccount } from "wagmi";
 import { useToast } from "@/hooks/use-toast";
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import { useState, useEffect } from "react";
-import type { Creator, CalendarEvent } from "@/types"; // Assuming types are defined
+import type { Creator, CalendarEvent } from "@/types";
+import { useActiveAccount } from "@thirdweb-dev/react";
 
 // Mock creator data
 const mockCreator: Creator = {
@@ -31,23 +31,24 @@ const mockAvailability: CalendarEvent[] = [
 
 export default function BookingPage() {
   const params = useParams();
-  const creatorId = params.creatorId as string; // In a real app, fetch creator data based on this ID
+  const creatorId = params.creatorId as string; 
   
-  const { address, isConnected } = useAccount();
+  const activeAccount = useActiveAccount();
+  const address = activeAccount?.address;
+  const isConnected = !!address;
+
   const { toast } = useToast();
   const [selectedSlot, setSelectedSlot] = useState<CalendarEvent | null>(null);
-  const [hasRequiredToken, setHasRequiredToken] = useState(false); // Mock state
+  const [hasRequiredToken, setHasRequiredToken] = useState(false); 
   const [isLoading, setIsLoading] = useState(true);
   const [creator, setCreator] = useState<Creator | null>(null);
 
   useEffect(() => {
-    // Simulate fetching creator data
     setIsLoading(true);
     setTimeout(() => {
-      if (creatorId === 'alex-chen-web3') { // Example dynamic route match
+      if (creatorId === 'alex-chen-web3') { 
         setCreator(mockCreator);
       } else {
-        // Handle creator not found
         setCreator(null);
       }
       setIsLoading(false);
@@ -56,9 +57,8 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (isConnected && address && creator) {
-      // Mock token check: In a real app, query the blockchain for token balance
-      // For example, if creator.tokens[0].id is the required token contract
-      setHasRequiredToken(true); // Assume user has token for demo
+      // Mock token check
+      setHasRequiredToken(true); 
     } else {
       setHasRequiredToken(false);
     }
@@ -83,7 +83,6 @@ export default function BookingPage() {
       return;
     }
     setSelectedSlot(slot);
-    // Mock booking confirmation
     toast({
       title: "Booking Confirmed!",
       description: `Your session with ${creator.name} on ${slot.start.toLocaleDateString()} at ${slot.start.toLocaleTimeString()} is confirmed. (Mock)`,
@@ -170,7 +169,6 @@ export default function BookingPage() {
             <CardDescription>Select an available time slot from {creator.name || 'the creator'}'s calendar.</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* This is a mock calendar. A real implementation would use a library like react-big-calendar or a custom grid. */}
             <div className="space-y-4">
               <h3 className="font-semibold text-lg mb-2">Available Slots:</h3>
               {mockAvailability.length > 0 ? mockAvailability.map((slot, index) => (

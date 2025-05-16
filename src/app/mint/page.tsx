@@ -8,29 +8,33 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useAccount, useWalletClient } from "wagmi";
 import { useToast } from "@/hooks/use-toast";
 import { Zap, AlertTriangle } from "lucide-react";
-// import { createERC20 } from '@zoralabs/protocol-sdk'; // Example import
-// import { type WalletClient, type PublicClient } from 'viem'; // Example import
-// import { usePublicClient } from 'wagmi'; // Example import
+import { useState } from "react";
+import { useActiveAccount, useSendTransaction } from "@thirdweb-dev/react";
+import { client as thirdwebClient } from "@/lib/thirdweb";
+import { base } from "thirdweb/chains";
+// import { getRpcClient } from "thirdweb/rpc"; // For PublicClient
+// import { createERC20 } from '@zoralabs/protocol-sdk'; // Zora SDK for token creation
+// import type { Account as ViemAccount, PublicClient, WalletClient } from 'viem'; // Viem types
+// import { createWalletClient, custom } from 'viem'; // For creating Viem WalletClient from Thirdweb account
+
 
 const mintTokenFormSchema = z.object({
   name: z.string().min(2, "Token name must be at least 2 characters.").max(50, "Token name must be at most 50 characters."),
   symbol: z.string().min(2, "Symbol must be at least 2 characters.").max(10, "Symbol must be at most 10 characters.").regex(/^[A-Z0-9]+$/, "Symbol can only contain uppercase letters and numbers."),
   description: z.string().max(500, "Description must be at most 500 characters.").optional(),
   initialSupply: z.coerce.number().int().positive("Initial supply must be a positive integer."),
-  // Add more fields if needed, e.g., price, URI for metadata
 });
 
 type MintTokenFormValues = z.infer<typeof mintTokenFormSchema>;
 
 export default function MintTokenPage() {
-  const { address, isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient();
-  // const publicClient = usePublicClient(); // For read operations or if SDK needs it
+  const activeAccount = useActiveAccount();
+  const address = activeAccount?.address;
   const { toast } = useToast();
   const [isMinting, setIsMinting] = useState(false);
+  // const { mutate: sendTransaction } = useSendTransaction(); // Example for sending generic transactions
 
   const form = useForm<MintTokenFormValues>({
     resolver: zodResolver(mintTokenFormSchema),
@@ -43,7 +47,7 @@ export default function MintTokenPage() {
   });
 
   async function onSubmit(values: MintTokenFormValues) {
-    if (!isConnected || !address || !walletClient) {
+    if (!activeAccount || !address) {
       toast({
         title: "Wallet Not Connected",
         description: "Please connect your wallet to mint a token.",
@@ -59,35 +63,46 @@ export default function MintTokenPage() {
     });
 
     try {
-      // --- ZORA SDK INTEGRATION ---
-      // This is where you'd use the Zora Coin SDK.
-      // Example structure (actual implementation depends on Zora SDK specifics):
+      // --- ZORA SDK INTEGRATION (Needs Adaptation for Thirdweb) ---
+      // The Zora SDK's `createERC20` might expect Viem PublicClient and WalletClient.
+      // You'd need to:
+      // 1. Get a PublicClient:
+      //    const publicClient = getRpcClient({ client: thirdwebClient, chain: base });
+      // 2. Adapt `activeAccount` (Thirdweb Account) to a Viem WalletClient-like interface or
+      //    use a Zora SDK method that accepts a more generic signer/account.
+      //    This part is complex and depends on Zora SDK's flexibility.
+      //
+      // Example:
+      // const publicClient = getRpcClient({ client: thirdwebClient, chain: base });
+      // // Creating a Viem-compatible WalletClient from Thirdweb's activeAccount is non-trivial
+      // // and might require a custom adapter or a different Zora SDK function.
+      // // The `activeAccount` itself can send transactions: activeAccount.sendTransaction(...)
+
       // const txHash = await createERC20({
       //   tokenName: values.name,
       //   tokenSymbol: values.symbol,
       //   initialSupply: BigInt(values.initialSupply),
-      //   // Potentially other parameters like defaultAdmin, metadataURI
-      //   // Provide walletClient for signing
-      //   // Provide publicClient for chain interaction if needed by SDK
-      //   walletClient: walletClient as WalletClient, 
-      //   publicClient: publicClient as PublicClient,
+      //   // walletClient: yourAdaptedViemWalletClient, // This needs careful implementation
+      //   // publicClient: publicClient,
+      //   // from: address as `0x${string}`
       // });
       // console.log("Transaction Hash:", txHash);
 
-      // Mock successful minting for now
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate network delay
+
+      // Mock successful minting for now as Zora SDK integration requires specific adapter
+      await new Promise(resolve => setTimeout(resolve, 2000)); 
       
       console.log("Token minting requested:", values);
       toast({
-        title: "Token Minted Successfully!",
-        description: `Your token ${values.name} (${values.symbol}) has been minted. (This is a mock response)`,
+        title: "Token Minted Successfully! (Mock)",
+        description: `Your token ${values.name} (${values.symbol}) would have been minted. This is a mock response.`,
       });
       form.reset();
     } catch (error) {
       console.error("Minting error:", error);
       toast({
         title: "Minting Failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred.",
+        description: error instanceof Error ? error.message : "An unknown error occurred during mock minting.",
         variant: "destructive",
       });
     } finally {
@@ -95,18 +110,18 @@ export default function MintTokenPage() {
     }
   }
 
-  if (!isConnected) {
+  if (!address) { // Check for address (which implies activeAccount is connected)
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <Card className="w-full max-w-md p-8 shadow-xl">
            <Zap className="h-12 w-12 text-primary mx-auto mb-4" />
           <h2 className="text-2xl font-semibold mb-2">Mint Your Time Token</h2>
           <p className="text-muted-foreground mb-6">Connect your wallet to create and launch your unique access tokens.</p>
-          {/* ConnectWalletButton is in Header */}
            <div className="flex items-center justify-center p-4 mt-4 bg-destructive/10 text-destructive rounded-md">
             <AlertTriangle className="h-5 w-5 mr-2" />
             Please connect your wallet to proceed.
           </div>
+          {/* ConnectWalletButton is in Header, or you could place one here too */}
         </Card>
       </div>
     );
@@ -123,7 +138,7 @@ export default function MintTokenPage() {
           </CardTitle>
           <CardDescription>
             Create your unique ERC-20 token to represent access to your time or services.
-            This token will be minted on the Zora network.
+            This token will be minted on the Base network (via Zora protocol - mock).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -188,7 +203,7 @@ export default function MintTokenPage() {
               <Button type="submit" size="lg" className="w-full shadow-md hover:shadow-primary/30" disabled={isMinting}>
                 {isMinting ? "Minting Token..." : (
                   <>
-                    <Zap className="mr-2 h-5 w-5" /> Mint Token via Zora
+                    <Zap className="mr-2 h-5 w-5" /> Mint Token (Mock Zora)
                   </>
                 )}
               </Button>
@@ -199,6 +214,3 @@ export default function MintTokenPage() {
     </div>
   );
 }
-
-// Need to add useState for isMinting
-import { useState } from "react";

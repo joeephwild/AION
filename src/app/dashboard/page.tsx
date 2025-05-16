@@ -3,15 +3,15 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useAccount } from "wagmi";
 import Link from "next/link";
-import { PlusCircle, CalendarDays, ListChecks, Settings, ExternalLink, Edit3, Trash2, Eye } from "lucide-react";
+import { PlusCircle, CalendarDays, ListChecks, Settings, ExternalLink, Edit3, Eye, Zap } from "lucide-react"; // Added Zap
 import { CalendarConnect } from "@/components/core/calendar-connect";
-import Image from "next/image"; // For placeholder images
-import type { Token, Booking } from "@/types"; // Assuming types are defined
+import Image from "next/image";
+import type { Token, Booking } from "@/types";
 import { useState, useEffect } from "react";
+import { useActiveAccount } from "@thirdweb-dev/react";
 
-// Mock data - replace with actual data fetching
+
 const mockTokens: Token[] = [
   { id: '0x123...', name: '1-Hour Consultation', symbol: 'CONSULT', creatorId: '0xCreator', totalSupply: 100n },
   { id: '0x456...', name: '30-Min Quick Chat', symbol: 'CHAT30', creatorId: '0xCreator', totalSupply: 500n },
@@ -24,15 +24,18 @@ const mockBookings: Booking[] = [
 
 
 export default function DashboardPage() {
-  const { address, isConnected } = useAccount();
+  const activeAccount = useActiveAccount();
+  const address = activeAccount?.address;
+  const isConnected = !!address;
+
   const [userTokens, setUserTokens] = useState<Token[]>([]);
   const [userBookings, setUserBookings] = useState<Booking[]>([]);
 
   useEffect(() => {
     if (isConnected && address) {
       // In a real app, fetch tokens and bookings for the connected user (address)
-      setUserTokens(mockTokens); // Filter mockTokens or fetch real ones
-      setUserBookings(mockBookings); // Filter mockBookings or fetch real ones
+      setUserTokens(mockTokens); 
+      setUserBookings(mockBookings); 
     } else {
       setUserTokens([]);
       setUserBookings([]);
@@ -45,7 +48,7 @@ export default function DashboardPage() {
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <h2 className="text-2xl font-semibold mb-4">Connect Your Wallet</h2>
         <p className="text-muted-foreground mb-6">Please connect your wallet to access your creator dashboard.</p>
-        {/* ConnectWalletButton is in Header, but can be added here too if needed */}
+        {/* ConnectWalletButton is in Header */}
       </div>
     );
   }
