@@ -1,5 +1,8 @@
+
+'use client';
+
 import { http, createConfig } from 'wagmi';
-import { mainnet, sepolia } from 'wagmi/chains';
+import { mainnet, sepolia, base } from 'wagmi/chains'; // Added base
 import { coinbaseWallet, injected, walletConnect } from 'wagmi/connectors';
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
@@ -9,7 +12,7 @@ if (!projectId) {
 }
 
 export const wagmiConfig = createConfig({
-  chains: [mainnet, sepolia],
+  chains: [mainnet, sepolia, base], // Added base to the chains array
   connectors: [
     injected(),
     coinbaseWallet({ appName: 'Aion' }),
@@ -18,6 +21,8 @@ export const wagmiConfig = createConfig({
   transports: {
     [mainnet.id]: http(),
     [sepolia.id]: http(),
+    [base.id]: http(), // Added transport for base
   },
   ssr: true, // Enable SSR for Wagmi
 });
+
