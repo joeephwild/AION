@@ -18,6 +18,24 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async headers() {
+    return [
+      {
+        // Apply these headers to all routes in your application.
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin-allow-popups', // Recommended for Coinbase Wallet SDK
+          },
+          {
+            key: 'Cross-Origin-Embedder-Policy',
+            value: 'require-corp', // Recommended for security, may need adjustment based on embeds
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
