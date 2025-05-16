@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useAccount, useConnect, useDisconnect, useEnsName } from 'wagmi';
@@ -12,7 +13,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { InjectedConnector } from 'wagmi/connectors/injected'; // Default connector
 
 export function ConnectWalletButton() {
   const { address, isConnected, connector } = useAccount();
@@ -26,8 +26,7 @@ export function ConnectWalletButton() {
         <DropdownMenuTrigger asChild>
           <Button variant="outline" className="flex items-center gap-2 shadow-sm hover:shadow-primary/30">
             <Avatar className="h-6 w-6">
-              {/* Placeholder for ENS avatar or generated one */}
-              <AvatarImage src={`https://avatar.vercel.sh/${address}.png`} alt={address} />
+              <AvatarImage src={`https://avatar.vercel.sh/${address}.png`} alt={ensName ?? address ?? ''} />
               <AvatarFallback>
                 <UserCircle className="h-4 w-4" />
               </AvatarFallback>
@@ -48,18 +47,20 @@ export function ConnectWalletButton() {
     );
   }
 
-  // Filter to primarily show InjectedConnector if available, then others.
-  const preferredConnectors = connectors.filter(c => c.id === 'injected');
-  const otherConnectors = connectors.filter(c => c.id !== 'injected');
-  const displayConnectors = preferredConnectors.length > 0 ? preferredConnectors : otherConnectors;
-
-
-  if (displayConnectors.length === 1 && displayConnectors[0]) {
-     // If only one connector (likely 'injected' or a specific one like Coinbase Wallet from auto-detection)
-    const singleConnector = displayConnectors[0];
+  // If not connected
+  if (connectors.length === 0) {
     return (
-      <Button 
-        onClick={() => connect({ connector: singleConnector })} 
+      <Button disabled className="shadow-sm">
+        <AlertTriangle className="mr-2 h-4 w-4" /> No Wallets Detected
+      </Button>
+    );
+  }
+
+  if (connectors.length === 1 && connectors[0]) {
+    const singleConnector = connectors[0];
+    return (
+      <Button
+        onClick={() => connect({ connector: singleConnector })}
         disabled={isLoading && pendingConnector?.id === singleConnector.id}
         className="shadow-sm hover:shadow-primary/30"
       >
@@ -67,13 +68,14 @@ export function ConnectWalletButton() {
           'Connecting...'
         ) : (
           <>
-            <LogIn className="mr-2 h-4 w-4" /> Connect Wallet
+            <LogIn className="mr-2 h-4 w-4" /> Connect {singleConnector.name}
           </>
         )}
       </Button>
     );
   }
 
+  // If multiple connectors, always show the dropdown
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
