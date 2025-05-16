@@ -9,7 +9,7 @@ import { CalendarConnect } from "@/components/core/calendar-connect";
 import Image from "next/image";
 import type { Token, Booking } from "@/types";
 import { useState, useEffect } from "react";
-import { useActiveAccount } from "@thirdweb-dev/react";
+import { useAddress  } from "@thirdweb-dev/react";
 
 
 const mockTokens: Token[] = [
@@ -24,8 +24,7 @@ const mockBookings: Booking[] = [
 
 
 export default function DashboardPage() {
-  const activeAccount = useActiveAccount();
-  const address = activeAccount?.address;
+  const address = useAddress();
   const isConnected = !!address;
 
   const [userTokens, setUserTokens] = useState<Token[]>([]);

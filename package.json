@@ -55,7 +55,9 @@
     "tailwindcss-animate": "^1.0.7",
     "thirdweb": "latest",
     "viem": "^2.20.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "magic-sdk": "latest",
+    "@magic-ext/oauth": "latest"
   },
   "devDependencies": {
     "@types/node": "^20.14.18",
