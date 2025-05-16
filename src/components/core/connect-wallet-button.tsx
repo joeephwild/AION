@@ -1,6 +1,7 @@
 
 'use client';
 
+import { useState, useEffect } from 'react'; // Ensure useState and useEffect are imported
 import { useAccount, useConnect, useDisconnect, useEnsName } from 'wagmi';
 import { Button } from '@/components/ui/button';
 import { LogIn, LogOut, UserCircle, AlertTriangle } from 'lucide-react';
@@ -15,16 +16,33 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export function ConnectWalletButton() {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   const { address, isConnected, connector } = useAccount();
   const { data: ensName } = useEnsName({ address });
   const { connect, connectors, error, isLoading, pendingConnector } = useConnect();
   const { disconnect } = useDisconnect();
 
+  if (!isClient) {
+    // Render a placeholder button on the server and during initial client render
+    // This avoids hydration mismatch for components like DropdownMenu that add attributes on client
+    return (
+      <Button variant="outline" className="flex items-center gap-2 shadow-sm" disabled>
+        <LogIn className="mr-2 h-4 w-4" />
+        <span>Loading Wallet...</span>
+      </Button>
+    );
+  }
+
   if (isConnected) {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="flex items-center gap-2 shadow-sm hover:shadow-primary/30">
+          <Button variant="outline" className="flex items-center gap-2 shadow-sm hover:shadow-primary/30" type="button">
             <Avatar className="h-6 w-6">
               <AvatarImage src={`https://avatar.vercel.sh/${address}.png`} alt={ensName ?? address ?? ''} />
               <AvatarFallback>
@@ -50,7 +68,7 @@ export function ConnectWalletButton() {
   // If not connected
   if (connectors.length === 0) {
     return (
-      <Button disabled className="shadow-sm">
+      <Button disabled className="shadow-sm" type="button">
         <AlertTriangle className="mr-2 h-4 w-4" /> No Wallets Detected
       </Button>
     );
@@ -63,6 +81,7 @@ export function ConnectWalletButton() {
         onClick={() => connect({ connector: singleConnector })}
         disabled={isLoading && pendingConnector?.id === singleConnector.id}
         className="shadow-sm hover:shadow-primary/30"
+        type="button"
       >
         {isLoading && pendingConnector?.id === singleConnector.id ? (
           'Connecting...'
@@ -79,7 +98,7 @@ export function ConnectWalletButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button className="shadow-sm hover:shadow-primary/30">
+        <Button className="shadow-sm hover:shadow-primary/30" type="button">
           <LogIn className="mr-2 h-4 w-4" /> Connect Wallet
         </Button>
       </DropdownMenuTrigger>
