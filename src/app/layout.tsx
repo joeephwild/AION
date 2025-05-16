@@ -1,10 +1,12 @@
+
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
-import { ThirdwebProvider } from '@/components/providers/thirdweb-provider'; // Updated provider
+import { ThirdwebProvider } from 'thirdweb/react'; // Updated import path
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
 import { Toaster } from "@/components/ui/toaster";
+import { client } from '@/lib/thirdweb'; // Import the client
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -29,7 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans flex flex-col min-h-screen`}>
-        <ThirdwebProvider> {/* Updated provider */}
+        <ThirdwebProvider> {/* Use ThirdwebProvider directly */}
           <Header />
           <main className="flex-grow container mx-auto px-4 py-8">
             {children}

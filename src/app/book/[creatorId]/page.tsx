@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { useParams } from "next/navigation";
 import Image from "next/image";
 import { useState, useEffect } from "react";
 import type { Creator, CalendarEvent } from "@/types";
-import { useActiveAccount } from "@thirdweb-dev/react";
+import { useActiveAccount } from "thirdweb/react"; // Updated import
 
 // Mock creator data
 const mockCreator: Creator = {
@@ -33,8 +34,8 @@ export default function BookingPage() {
   const params = useParams();
   const creatorId = params.creatorId as string; 
   
-  const activeAccount = useActiveAccount();
-  const address = activeAccount?.address;
+  const account = useActiveAccount(); // Use Thirdweb v5 hook
+  const address = account?.address;
   const isConnected = !!address;
 
   const { toast } = useToast();

@@ -1,15 +1,16 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
-import { PlusCircle, CalendarDays, ListChecks, Settings, ExternalLink, Edit3, Eye, Zap } from "lucide-react"; // Added Zap
+import { PlusCircle, CalendarDays, ListChecks, Settings, ExternalLink, Edit3, Eye, Zap } from "lucide-react";
 import { CalendarConnect } from "@/components/core/calendar-connect";
 import Image from "next/image";
 import type { Token, Booking } from "@/types";
 import { useState, useEffect } from "react";
-import { useAddress  } from "@thirdweb-dev/react";
+import { useActiveAccount } from "thirdweb/react"; // Updated import
 
 
 const mockTokens: Token[] = [
@@ -24,7 +25,8 @@ const mockBookings: Booking[] = [
 
 
 export default function DashboardPage() {
-  const address = useAddress();
+  const account = useActiveAccount(); // Use Thirdweb v5 hook
+  const address = account?.address;
   const isConnected = !!address;
 
   const [userTokens, setUserTokens] = useState<Token[]>([]);
@@ -47,7 +49,7 @@ export default function DashboardPage() {
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <h2 className="text-2xl font-semibold mb-4">Connect Your Wallet</h2>
         <p className="text-muted-foreground mb-6">Please connect your wallet to access your creator dashboard.</p>
-        {/* ConnectWalletButton is in Header */}
+        {/* ConnectButton is in Header */}
       </div>
     );
   }
