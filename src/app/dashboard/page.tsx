@@ -51,8 +51,8 @@ export default function DashboardPage() {
                   symbol: coinData.symbol || basicTokenInfo.symbol,
                   creatorId: coinData.creatorAddress || basicTokenInfo.creatorId,
                   totalSupply: coinData.totalSupply?.toString(),
-                  uri: coinData.tokenURI,
-                  imageUrl: coinData.mediaContent?.previewImage || undefined,
+                  uri: coinData?.tokenURI,
+                  imageUrl: coinData?.mediaContent?.previewImage as string,
                 });
               } else {
                  // Fallback to basic info if getCoin fails or returns no data

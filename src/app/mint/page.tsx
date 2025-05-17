@@ -8,17 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea"; // Keep for description if Zora URI is for JSON metadata
+// import { Textarea } from "@/components/ui/textarea"; 
 import { useToast } from "@/hooks/use-toast";
 import { Zap, AlertTriangle, Loader2, CheckCircle, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
-import { client as thirdwebClient } from "@/lib/thirdweb";
+// import { client as thirdwebClient } from "@/lib/thirdweb"; 
 import { base } from "thirdweb/chains";
 import { createCoinCall, getCoinCreateFromLogs } from "@zoralabs/coins-sdk";
 import { type Address, createPublicClient, http, parseEther } from "viem";
 import Link from "next/link";
-import type { Token } from "@/types"; // Import Token type
+import type { Token } from "@/types"; 
 
 
 // Schema for Zora Coin creation
@@ -26,7 +26,6 @@ const mintTokenFormSchema = z.object({
   name: z.string().min(2, "Token name must be at least 2 characters.").max(50, "Token name must be at most 50 characters."),
   symbol: z.string().min(2, "Symbol must be at least 2 characters.").max(10, "Symbol must be at most 10 characters.").regex(/^[A-Z0-9]+$/, "Symbol can only contain uppercase letters and numbers."),
   uri: z.string().url("Must be a valid URL (e.g., ipfs://<CID> or https://.../metadata.json)."),
-  // initialSupply is handled by Zora mechanism, not a direct form input here
 });
 
 type MintTokenFormValues = z.infer<typeof mintTokenFormSchema>;
@@ -34,7 +33,7 @@ type MintTokenFormValues = z.infer<typeof mintTokenFormSchema>;
 // Create a Viem public client for Base chain to fetch transaction receipts
 const publicClient = createPublicClient({
   chain: base,
-  transport: http(), // Uses default public RPC for Base, or configure specific one
+  transport: http('https://mainnet.base.org'), 
 });
 
 export default function MintTokenPage() {
@@ -45,14 +44,14 @@ export default function MintTokenPage() {
   const [mintingStep, setMintingStep] = useState<string | null>(null);
   const [deployedCoinAddress, setDeployedCoinAddress] = useState<Address | null>(null);
   const [transactionHash, setTransactionHash] = useState<string | null>(null);
-  const { mutate: sendTransaction, variables: txVariables, data: txData, error: txError, status: txStatus } = useSendTransaction();
+  const { mutate: sendTransaction } = useSendTransaction();
 
   const form = useForm<MintTokenFormValues>({
     resolver: zodResolver(mintTokenFormSchema),
     defaultValues: {
       name: "",
       symbol: "",
-      uri: "ipfs://", // Default to IPFS prefix
+      uri: "ipfs://", 
     },
   });
 
@@ -77,8 +76,7 @@ export default function MintTokenPage() {
         symbol: values.symbol,
         uri: values.uri,
         payoutRecipient: address,
-        // platformReferrer: "0xOptionalPlatformReferrerAddress" as Address, // Optional
-        initialPurchaseWei: 0n, // No initial purchase for this example
+        initialPurchaseWei: 0n, 
       };
 
       const contractCallTx = await createCoinCall(coinParams);
@@ -89,9 +87,8 @@ export default function MintTokenPage() {
         {
           to: contractCallTx.to,
           data: contractCallTx.data,
-          value: contractCallTx.value, // Should be 0n based on initialPurchaseWei
-          chain: base, // Ensure transaction is for Base chain
-          // gas, gasPrice, maxFeePerGas, maxPriorityFeePerGas can be set if needed
+          value: contractCallTx.value, 
+          chain: base, 
         },
         {
           onSuccess: async (result) => {
@@ -124,7 +121,6 @@ export default function MintTokenPage() {
                 });
                 form.reset();
 
-                // Store locally for dashboard (temporary)
                 const newCoin: Token = {
                   id: coinDeployment.coin,
                   name: values.name,
