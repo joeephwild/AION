@@ -8,15 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-// import { Textarea } from "@/components/ui/textarea"; 
 import { useToast } from "@/hooks/use-toast";
 import { Zap, AlertTriangle, Loader2, CheckCircle, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
-// import { client as thirdwebClient } from "@/lib/thirdweb"; 
 import { base } from "thirdweb/chains";
 import { createCoinCall, getCoinCreateFromLogs } from "@zoralabs/coins-sdk";
-import { type Address, createPublicClient, http, parseEther } from "viem";
+import { type Address, createPublicClient, http } from "viem";
 import Link from "next/link";
 import type { Token } from "@/types"; 
 
@@ -25,7 +23,13 @@ import type { Token } from "@/types";
 const mintTokenFormSchema = z.object({
   name: z.string().min(2, "Token name must be at least 2 characters.").max(50, "Token name must be at most 50 characters."),
   symbol: z.string().min(2, "Symbol must be at least 2 characters.").max(10, "Symbol must be at most 10 characters.").regex(/^[A-Z0-9]+$/, "Symbol can only contain uppercase letters and numbers."),
-  uri: z.string().url("Must be a valid URL (e.g., ipfs://<CID> or https://.../metadata.json)."),
+  uri: z.string().refine(value => {
+    return value.startsWith("ipfs://") || value.startsWith("https://");
+  }, "Must be a valid URL starting with ipfs:// or https://.").refine(value => {
+    if (value.startsWith("ipfs://")) return value.length > "ipfs://".length;
+    if (value.startsWith("https://")) return value.length > "https://".length;
+    return false;
+  }, "URI must not be empty after the protocol."),
 });
 
 type MintTokenFormValues = z.infer<typeof mintTokenFormSchema>;
@@ -51,7 +55,7 @@ export default function MintTokenPage() {
     defaultValues: {
       name: "",
       symbol: "",
-      uri: "ipfs://", 
+      uri: "ipfs://bafybeigoxzqzbnxsn35vq7lls3ljxdcwjafxvbvkivprsodzrptpiguysy", // Updated placeholder
     },
   });
 
@@ -163,9 +167,18 @@ export default function MintTokenPage() {
 
     } catch (error) {
       console.error("Error preparing Zora coin transaction:", error);
+      let errorMessage = "An unknown error occurred.";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      // Check for specific "Metadata fetch failed" message
+      if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string' && error.message.toLowerCase().includes('metadata fetch failed')) {
+        errorMessage = "Metadata fetch failed. Please ensure the URI is a valid, accessible URL pointing to your JSON metadata (e.g., ipfs://<CID> or https://.../metadata.json).";
+      }
+
       toast({
         title: "Minting Preparation Failed",
-        description: error instanceof Error ? error.message : "An unknown error occurred.",
+        description: errorMessage,
         variant: "destructive",
       });
       setIsMinting(false);
@@ -242,13 +255,13 @@ export default function MintTokenPage() {
                       <Input placeholder="ipfs://<CID_of_metadata_json>" {...field} />
                     </FormControl>
                     <FormDescription>
-                      Link to your token's JSON metadata (name, description, image).
-                      Must be a valid URL (e.g., `ipfs://` or `https://`). See 
+                      Provide a complete and valid link to your token's JSON metadata (e.g., `ipfs://YOUR_CID_HERE` or `https://example.com/metadata.json`).
+                      This file should contain details like name, description, and image URL for your token. See the
                       <Button variant="link" asChild className="p-0 h-auto ml-1 text-accent hover:text-primary">
                          <Link href="https://docs.zora.co/docs/smart-contracts/creator-tools/metadata" target="_blank" rel="noopener noreferrer">
                             Zora Metadata Docs <ExternalLink className="h-3 w-3 ml-1" />
                          </Link>
-                      </Button>.
+                      </Button> for more information.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -306,3 +319,4 @@ export default function MintTokenPage() {
     </div>
   );
 }
+
