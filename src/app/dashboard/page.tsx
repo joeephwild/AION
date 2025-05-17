@@ -12,13 +12,8 @@ import type { Token, Booking } from "@/types";
 import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { useToast } from "@/hooks/use-toast";
-
-
-const mockTokens: Token[] = [ // This will also be replaced by fetched data eventually
-  { id: '0x123...', name: '1-Hour Consultation', symbol: 'CONSULT', creatorId: '0xCreator', totalSupply: 100n },
-  { id: '0x456...', name: '30-Min Quick Chat', symbol: 'CHAT30', creatorId: '0xCreator', totalSupply: 500n },
-];
-
+import { getCoin } from "@zoralabs/coins-sdk";
+import { base } from "thirdweb/chains";
 
 export default function DashboardPage() {
   const account = useActiveAccount();
@@ -28,54 +23,89 @@ export default function DashboardPage() {
   const { toast } = useToast();
 
   const [userTokens, setUserTokens] = useState<Token[]>([]);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
   const [userBookings, setUserBookings] = useState<Booking[]>([]);
   const [isLoadingBookings, setIsLoadingBookings] = useState(false);
 
   useEffect(() => {
-    if (isConnected && address) {
-      // In a real app, fetch tokens for the connected user (address)
-      setUserTokens(mockTokens); 
-      
-      const fetchBookings = async () => {
+    async function fetchDashboardData() {
+      if (isConnected && address) {
+        setIsLoading(true);
+        setIsLoadingTokens(true);
         setIsLoadingBookings(true);
+
+        // Fetch Zora tokens created by user (from localStorage for now)
         try {
-          const response = await fetch(`/api/bookings?creatorId=${address}`);
-          const data = await response.json();
-          if (response.ok && data.success) {
-            // Convert startTime and endTime strings to Date objects
-            const bookingsWithDates = data.bookings.map((b: any) => ({
+          const storedTokensString = localStorage.getItem(`userTokens_${address}`);
+          const storedCoinAddresses: { id: string, name: string, symbol: string, uri?: string, creatorId: string }[] = storedTokensString ? JSON.parse(storedTokensString) : [];
+          
+          const fetchedTokens: Token[] = [];
+          for (const basicTokenInfo of storedCoinAddresses) {
+            try {
+              const response = await getCoin({ address: basicTokenInfo.id, chain: base.id });
+              const coinData = response.data?.zora20Token;
+              if (coinData) {
+                fetchedTokens.push({
+                  id: coinData.address,
+                  name: coinData.name || basicTokenInfo.name,
+                  symbol: coinData.symbol || basicTokenInfo.symbol,
+                  creatorId: coinData.creatorAddress || basicTokenInfo.creatorId,
+                  totalSupply: coinData.totalSupply?.toString(),
+                  uri: coinData.tokenURI,
+                  imageUrl: coinData.mediaContent?.previewImage || undefined,
+                });
+              } else {
+                 // Fallback to basic info if getCoin fails or returns no data
+                fetchedTokens.push(basicTokenInfo as Token);
+              }
+            } catch (error) {
+              console.warn(`Failed to fetch details for coin ${basicTokenInfo.id}:`, error);
+              fetchedTokens.push(basicTokenInfo as Token); // Add basic info if detailed fetch fails
+            }
+          }
+          setUserTokens(fetchedTokens.reverse()); // Show newest first
+        } catch (error) {
+          console.error("Error fetching tokens:", error);
+          toast({ title: "Error Fetching Tokens", description: "Could not load your created tokens.", variant: "destructive" });
+        } finally {
+          setIsLoadingTokens(false);
+        }
+        
+        // Fetch bookings
+        try {
+          const bookingsResponse = await fetch(`/api/bookings?creatorId=${address}`);
+          const bookingsData = await bookingsResponse.json();
+          if (bookingsResponse.ok && bookingsData.success) {
+            const bookingsWithDates = bookingsData.bookings.map((b: any) => ({
               ...b,
               startTime: new Date(b.startTime),
               endTime: new Date(b.endTime),
             }));
             setUserBookings(bookingsWithDates);
           } else {
-            throw new Error(data.message || 'Failed to fetch bookings');
+            throw new Error(bookingsData.message || 'Failed to fetch bookings');
           }
         } catch (error) {
           console.error("Error fetching bookings:", error);
-          toast({
-            title: "Error Fetching Bookings",
-            description: error instanceof Error ? error.message : "Could not load your bookings.",
-            variant: "destructive",
-          });
-          setUserBookings([]); // Clear bookings on error
+          toast({ title: "Error Fetching Bookings", description: error instanceof Error ? error.message : "Could not load your bookings.", variant: "destructive" });
+          setUserBookings([]);
         } finally {
           setIsLoadingBookings(false);
         }
-      };
-      
-      fetchBookings();
-      setIsLoading(false); // Main loading state
-    } else if (!isConnected) {
-      setUserTokens([]);
-      setUserBookings([]);
-      setIsLoading(false);
+        setIsLoading(false);
+      } else if (!isConnected) {
+        setUserTokens([]);
+        setUserBookings([]);
+        setIsLoading(false);
+        setIsLoadingTokens(false);
+        setIsLoadingBookings(false);
+      }
     }
+    fetchDashboardData();
   }, [isConnected, address, toast]);
 
 
-  if (isLoading) {
+  if (isLoading && isConnected) { // Only show main loader if connected and initial load pending
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -84,13 +114,11 @@ export default function DashboardPage() {
     );
   }
 
-
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <h2 className="text-2xl font-semibold mb-4">Connect Your Wallet</h2>
         <p className="text-muted-foreground mb-6">Please connect your wallet to access your creator dashboard.</p>
-        {/* ConnectButton is in Header */}
       </div>
     );
   }
@@ -100,11 +128,11 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Creator Dashboard</h1>
-          <p className="text-muted-foreground">Manage your time tokens, calendar, and bookings.</p>
+          <p className="text-muted-foreground">Manage your Zora time tokens, calendar, and bookings.</p>
         </div>
         <Button asChild size="lg" className="shadow-md hover:shadow-primary/30">
           <Link href="/mint">
-            <PlusCircle className="mr-2 h-5 w-5" /> Mint New Token
+            <PlusCircle className="mr-2 h-5 w-5" /> Mint New Zora Token
           </Link>
         </Button>
       </div>
@@ -112,29 +140,47 @@ export default function DashboardPage() {
       <Separator />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* My Tokens Section */}
         <Card className="md:col-span-2 shadow-lg">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Zap className="h-6 w-6 text-primary" /> My Time Tokens</CardTitle>
-            <CardDescription>View and manage your minted ERC-20 time tokens. (Mock Data)</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Zap className="h-6 w-6 text-primary" /> My Zora Time Tokens</CardTitle>
+            <CardDescription>View and manage your minted Zora time tokens. (Data from local storage & Zora SDK)</CardDescription>
           </CardHeader>
           <CardContent>
-            {userTokens.length > 0 ? (
+            {isLoadingTokens ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <p className="ml-2 text-muted-foreground">Loading tokens...</p>
+              </div>
+            ) : userTokens.length > 0 ? (
               <ul className="space-y-4">
                 {userTokens.map(token => (
                   <li key={token.id} className="p-4 border rounded-lg bg-background hover:bg-muted/30 transition-colors">
                     <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold text-lg">{token.name} ({token.symbol})</h3>
-                        <p className="text-sm text-muted-foreground">Contract: {`${token.id.slice(0,10)}...${token.id.slice(-8)}`}</p>
-                        <p className="text-sm text-muted-foreground">Total Supply: {token.totalSupply.toString()}</p>
+                      <div className="flex items-start gap-4">
+                        {token.imageUrl && (
+                           <Image src={token.imageUrl} alt={token.name} width={64} height={64} className="rounded-md aspect-square object-cover" data-ai-hint="token icon" />
+                        )}
+                        {!token.imageUrl && token.id && ( // Placeholder if no image
+                          <div className="w-16 h-16 bg-muted rounded-md flex items-center justify-center text-primary text-2xl font-bold">
+                            {token.symbol ? token.symbol.charAt(0) : '?'}
+                          </div>
+                        )}
+                        <div>
+                          <h3 className="font-semibold text-lg">{token.name} ({token.symbol})</h3>
+                          <p className="text-sm text-muted-foreground">Contract: {`${token.id.slice(0,10)}...${token.id.slice(-8)}`}</p>
+                          {token.totalSupply && <p className="text-sm text-muted-foreground">Total Supply: {token.totalSupply}</p>}
+                           {token.uri && (
+                            <p className="text-sm text-muted-foreground truncate max-w-xs">
+                                URI: <Link href={token.uri.startsWith('ipfs://') ? `https://ipfs.io/ipfs/${token.uri.substring(7)}` : token.uri} target="_blank" className="text-accent hover:underline">{token.uri}</Link>
+                            </p>
+                           )}
+                        </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="icon" aria-label="View Token">
-                           <Eye className="h-4 w-4 text-accent" />
-                        </Button>
-                         <Button variant="outline" size="icon" aria-label="Edit Token">
-                           <Edit3 className="h-4 w-4" />
+                      <div className="flex gap-2 mt-2 sm:mt-0">
+                        <Button variant="outline" size="icon" aria-label="View Token on Basescan" asChild>
+                           <Link href={`https://basescan.org/address/${token.id}`} target="_blank">
+                             <Eye className="h-4 w-4 text-accent" />
+                           </Link>
                         </Button>
                       </div>
                     </div>
@@ -144,7 +190,7 @@ export default function DashboardPage() {
             ) : (
               <div className="text-center py-8">
                 <Image src="https://placehold.co/300x200.png" data-ai-hint="empty state tokens" alt="No tokens" width={300} height={200} className="mx-auto mb-4 rounded-md opacity-50" />
-                <p className="text-muted-foreground">You haven't minted any tokens yet.</p>
+                <p className="text-muted-foreground">You haven't minted any Zora tokens yet, or none were found in local storage.</p>
                 <Button variant="link" asChild className="text-primary hover:text-accent">
                   <Link href="/mint">Mint your first token</Link>
                 </Button>
@@ -153,7 +199,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Calendar Integration Section */}
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><CalendarDays className="h-6 w-6 text-primary" /> Calendar Integration</CardTitle>
@@ -172,7 +217,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* My Bookings Section */}
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><ListChecks className="h-6 w-6 text-primary" /> My Bookings</CardTitle>
@@ -194,8 +238,7 @@ export default function DashboardPage() {
                       <p className="text-sm text-muted-foreground">
                         {booking.startTime.toLocaleString()} - {booking.endTime.toLocaleTimeString()}
                       </p>
-                      {/* For a real app, you'd fetch token details based on booking.tokenId */}
-                      <p className="text-sm text-muted-foreground">Token ID: {`${booking.tokenId.slice(0,10)}...`}</p>
+                      <p className="text-sm text-muted-foreground">Token ID: <Link href={`https://basescan.org/token/${booking.tokenId}`} target="_blank" className="text-accent hover:underline">{`${booking.tokenId.slice(0,10)}...`}</Link></p>
                     </div>
                     <div className="mt-2 sm:mt-0">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
