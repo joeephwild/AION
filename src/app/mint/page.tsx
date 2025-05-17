@@ -17,6 +17,7 @@ import { createCoinCall, getCoinCreateFromLogs } from "@zoralabs/coins-sdk";
 import { type Address, createPublicClient, http } from "viem";
 import Link from "next/link";
 import type { Token } from "@/types"; 
+import { client } from "@/lib/thirdweb";
 
 
 // Schema for Zora Coin creation
@@ -60,7 +61,7 @@ export default function MintTokenPage() {
   });
 
   async function onSubmit(values: MintTokenFormValues) {
-    if (!address) {
+    if (!address || !account) { // Ensure account is also available for chain and client
       toast({
         title: "Wallet Not Connected",
         description: "Please connect your wallet to mint a token.",
@@ -88,11 +89,10 @@ export default function MintTokenPage() {
       setMintingStep("Please confirm in your wallet...");
       
       sendTransaction(
-        {
-          to: contractCallTx.to,
-          data: contractCallTx.data,
-          value: contractCallTx.value, 
-          chain: base, 
+        { // Pass client and chain with the transaction object
+          ...contractCallTx,
+          chain: base, // Use the imported base chain from thirdweb/chains
+          client: client, // Use the imported client from @/lib/thirdweb
         },
         {
           onSuccess: async (result) => {
@@ -125,6 +125,7 @@ export default function MintTokenPage() {
                 });
                 form.reset();
 
+                // Store in local storage for now (as per previous implementation)
                 const newCoin: Token = {
                   id: coinDeployment.coin,
                   name: values.name,
