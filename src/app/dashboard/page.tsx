@@ -5,22 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
-import { PlusCircle, CalendarDays, ListChecks, Settings, ExternalLink, Edit3, Eye, Zap, Clock } from "lucide-react";
+import { PlusCircle, CalendarDays, ListChecks, Settings, ExternalLink, Edit3, Eye, Zap, Loader2 } from "lucide-react";
 import { CalendarConnect } from "@/components/core/calendar-connect";
 import Image from "next/image";
 import type { Token, Booking } from "@/types";
 import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
+import { useToast } from "@/hooks/use-toast";
 
 
-const mockTokens: Token[] = [
+const mockTokens: Token[] = [ // This will also be replaced by fetched data eventually
   { id: '0x123...', name: '1-Hour Consultation', symbol: 'CONSULT', creatorId: '0xCreator', totalSupply: 100n },
   { id: '0x456...', name: '30-Min Quick Chat', symbol: 'CHAT30', creatorId: '0xCreator', totalSupply: 500n },
-];
-
-const mockBookings: Booking[] = [
-  { id: 'booking1', creatorId: '0xCreator', clientId: '0xClient1', tokenId: '0x123...', startTime: new Date(Date.now() + 86400000 * 2), endTime: new Date(Date.now() + 86400000 * 2 + 3600000), status: 'confirmed' },
-  { id: 'booking2', creatorId: '0xCreator', clientId: '0xClient2', tokenId: '0x456...', startTime: new Date(Date.now() + 86400000 * 3), endTime: new Date(Date.now() + 86400000 * 3 + 1800000), status: 'pending' },
 ];
 
 
@@ -29,29 +25,60 @@ export default function DashboardPage() {
   const address = account?.address;
   const isConnected = !!address;
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   const [userTokens, setUserTokens] = useState<Token[]>([]);
   const [userBookings, setUserBookings] = useState<Booking[]>([]);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(false);
 
   useEffect(() => {
     if (isConnected && address) {
-      // In a real app, fetch tokens and bookings for the connected user (address)
+      // In a real app, fetch tokens for the connected user (address)
       setUserTokens(mockTokens); 
-      setUserBookings(mockBookings); 
-      setIsLoading(false);
+      
+      const fetchBookings = async () => {
+        setIsLoadingBookings(true);
+        try {
+          const response = await fetch(`/api/bookings?creatorId=${address}`);
+          const data = await response.json();
+          if (response.ok && data.success) {
+            // Convert startTime and endTime strings to Date objects
+            const bookingsWithDates = data.bookings.map((b: any) => ({
+              ...b,
+              startTime: new Date(b.startTime),
+              endTime: new Date(b.endTime),
+            }));
+            setUserBookings(bookingsWithDates);
+          } else {
+            throw new Error(data.message || 'Failed to fetch bookings');
+          }
+        } catch (error) {
+          console.error("Error fetching bookings:", error);
+          toast({
+            title: "Error Fetching Bookings",
+            description: error instanceof Error ? error.message : "Could not load your bookings.",
+            variant: "destructive",
+          });
+          setUserBookings([]); // Clear bookings on error
+        } finally {
+          setIsLoadingBookings(false);
+        }
+      };
+      
+      fetchBookings();
+      setIsLoading(false); // Main loading state
     } else if (!isConnected) {
-      // if not connected, also stop loading
       setUserTokens([]);
       setUserBookings([]);
       setIsLoading(false);
     }
-  }, [isConnected, address]);
+  }, [isConnected, address, toast]);
 
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Clock className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="ml-2 text-lg text-muted-foreground">Loading dashboard...</p>
       </div>
     );
@@ -89,7 +116,7 @@ export default function DashboardPage() {
         <Card className="md:col-span-2 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Zap className="h-6 w-6 text-primary" /> My Time Tokens</CardTitle>
-            <CardDescription>View and manage your minted ERC-20 time tokens.</CardDescription>
+            <CardDescription>View and manage your minted ERC-20 time tokens. (Mock Data)</CardDescription>
           </CardHeader>
           <CardContent>
             {userTokens.length > 0 ? (
@@ -152,7 +179,12 @@ export default function DashboardPage() {
           <CardDescription>View and manage upcoming and past bookings.</CardDescription>
         </CardHeader>
         <CardContent>
-          {userBookings.length > 0 ? (
+          {isLoadingBookings ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              <p className="ml-2 text-muted-foreground">Loading bookings...</p>
+            </div>
+          ) : userBookings.length > 0 ? (
             <ul className="space-y-4">
               {userBookings.map(booking => (
                 <li key={booking.id} className="p-4 border rounded-lg bg-background hover:bg-muted/30 transition-colors">
@@ -160,9 +192,10 @@ export default function DashboardPage() {
                     <div>
                       <h3 className="font-semibold">Booking with {`${booking.clientId.slice(0,6)}...${booking.clientId.slice(-4)}`}</h3>
                       <p className="text-sm text-muted-foreground">
-                        {new Date(booking.startTime).toLocaleString()} - {new Date(booking.endTime).toLocaleTimeString()}
+                        {booking.startTime.toLocaleString()} - {booking.endTime.toLocaleTimeString()}
                       </p>
-                      <p className="text-sm text-muted-foreground">Token: {mockTokens.find(t => t.id === booking.tokenId)?.name || 'Unknown Token'}</p>
+                      {/* For a real app, you'd fetch token details based on booking.tokenId */}
+                      <p className="text-sm text-muted-foreground">Token ID: {`${booking.tokenId.slice(0,10)}...`}</p>
                     </div>
                     <div className="mt-2 sm:mt-0">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${

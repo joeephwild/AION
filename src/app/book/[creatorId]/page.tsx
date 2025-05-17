@@ -4,21 +4,21 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Calendar, DollarSign, CheckCircle, AlertTriangle, Clock, Info } from "lucide-react";
+import { Calendar, DollarSign, CheckCircle, AlertTriangle, Clock, Info, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import { useState, useEffect } from "react";
-import type { Creator, CalendarEvent } from "@/types";
+import type { Creator, CalendarEvent, Booking } from "@/types";
 import { useActiveAccount } from "thirdweb/react";
 
 // Mock creator data
 const mockCreator: Creator = {
-  id: '0xCreatorAddressPlaceholder',
+  id: 'alex-chen-web3', // Using the slug as mock ID for simplicity here
   name: 'Alex Chen',
   bio: 'Experienced Web3 consultant and smart contract developer. Book a session to discuss your project.',
   avatarUrl: 'https://placehold.co/128x128.png',
-  tokens: [{ id: '0xTokenContract', name: '1-Hour Consultation Token', symbol: 'ACT', creatorId: '0xCreatorAddressPlaceholder', totalSupply: 100n }],
+  tokens: [{ id: '0xTokenContractPlaceholder', name: '1-Hour Consultation Token', symbol: 'ACT', creatorId: 'alex-chen-web3', totalSupply: 100n }],
   calendarIntegrations: { google: true, outlook: false },
 };
 
@@ -32,7 +32,7 @@ const mockAvailability: CalendarEvent[] = [
 
 export default function BookingPage() {
   const params = useParams();
-  const creatorId = params.creatorId as string; 
+  const creatorIdParam = params.creatorId as string; 
   
   const account = useActiveAccount();
   const address = account?.address;
@@ -41,23 +41,22 @@ export default function BookingPage() {
   const { toast } = useToast();
   const [selectedSlot, setSelectedSlot] = useState<CalendarEvent | null>(null);
   const [hasRequiredToken, setHasRequiredToken] = useState(false); 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingCreator, setIsLoadingCreator] = useState(true);
+  const [isBooking, setIsBooking] = useState(false);
   const [creator, setCreator] = useState<Creator | null>(null);
 
   useEffect(() => {
-    setIsLoading(true);
+    setIsLoadingCreator(true);
     // Simulate fetching creator data
     setTimeout(() => {
-      if (creatorId === 'alex-chen-web3') { // Use a mock slug or ID
+      if (creatorIdParam === 'alex-chen-web3') { 
         setCreator(mockCreator);
       } else {
-        // In a real app, you'd fetch this from a backend/database
-        // For now, handle as "not found" for other IDs
         setCreator(null);
       }
-      setIsLoading(false);
+      setIsLoadingCreator(false);
     }, 1000);
-  }, [creatorId]);
+  }, [creatorIdParam]);
 
   useEffect(() => {
     if (isConnected && address && creator) {
@@ -68,12 +67,12 @@ export default function BookingPage() {
     }
   }, [isConnected, address, creator]);
 
-  const handleBookSlot = (slot: CalendarEvent) => {
-    if (!isConnected) {
+  const handleBookSlot = async (slot: CalendarEvent) => {
+    if (!isConnected || !address) {
       toast({ title: "Connect Wallet", description: "Please connect your wallet to book a session.", variant: "destructive" });
       return;
     }
-    if (!creator || creator.tokens.length === 0) {
+    if (!creator || !creator.tokens || creator.tokens.length === 0) {
        toast({ title: "Booking Error", description: "Creator or token information is missing.", variant: "destructive" });
       return;
     }
@@ -86,18 +85,53 @@ export default function BookingPage() {
       });
       return;
     }
+    
     setSelectedSlot(slot);
-    // Mock booking confirmation
-    toast({
-      title: "Booking Confirmed! (Mock)",
-      description: `Your session with ${creator.name} on ${slot.start.toLocaleDateString()} at ${slot.start.toLocaleTimeString()} is confirmed. This is a mock confirmation.`,
-    });
+    setIsBooking(true);
+
+    try {
+      const response = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': address, // clientId is the booker's address
+        },
+        body: JSON.stringify({
+          creatorId: creator.id,
+          tokenId: creator.tokens[0].id,
+          startTime: slot.start.toISOString(),
+          endTime: slot.end.toISOString(),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        toast({
+          title: "Booking Confirmed!",
+          description: `Your session with ${creator.name} on ${slot.start.toLocaleDateString()} at ${slot.start.toLocaleTimeString()} is confirmed.`,
+        });
+        // Optionally, clear selected slot or refresh availability
+      } else {
+        throw new Error(result.message || 'Failed to create booking.');
+      }
+    } catch (error) {
+      console.error("Booking error:", error);
+      toast({
+        title: "Booking Failed",
+        description: error instanceof Error ? error.message : "An unknown error occurred.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBooking(false);
+      setSelectedSlot(null); // Clear selection after attempt
+    }
   };
   
-  if (isLoading) {
+  if (isLoadingCreator) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Clock className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="ml-2 text-lg text-muted-foreground">Loading creator details...</p>
       </div>
     );
@@ -129,7 +163,7 @@ export default function BookingPage() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground text-center">{creator.bio || 'No bio available.'}</p>
-            {creator.tokens.length > 0 && (
+            {creator.tokens && creator.tokens.length > 0 && (
               <div className="mt-4 p-3 bg-muted/30 rounded-md text-center">
                 <p className="text-sm font-semibold">Requires: <span className="text-primary">{creator.tokens[0].name} ({creator.tokens[0].symbol})</span></p>
               </div>
@@ -145,7 +179,7 @@ export default function BookingPage() {
             </CardContent>
           </Card>
         )}
-        {isConnected && !hasRequiredToken && creator.tokens.length > 0 && (
+        {isConnected && !hasRequiredToken && creator.tokens && creator.tokens.length > 0 && (
            <Card className="bg-destructive/10 border-destructive/30 shadow-lg">
             <CardContent className="pt-6 text-center">
               <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-2" />
@@ -171,7 +205,7 @@ export default function BookingPage() {
         <Card className="shadow-xl">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-2xl"><Calendar className="h-7 w-7 text-primary" /> Book a Session</CardTitle>
-            <CardDescription>Select an available time slot from {creator.name || 'the creator'}'s calendar. <br /><span className="text-xs text-accent/80 flex items-center mt-1"><Info size={14} className="mr-1"/> Availability shown is for demonstration purposes.</span></CardDescription>
+            <CardDescription>Select an available time slot from {creator.name || 'the creator'}'s calendar. <br /><span className="text-xs text-accent/80 flex items-center mt-1"><Info size={14} className="mr-1"/> Availability shown is for demonstration purposes. Actual bookings use this data.</span></CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -180,7 +214,7 @@ export default function BookingPage() {
                 <Card 
                   key={index} 
                   className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${selectedSlot === slot ? 'ring-2 ring-primary bg-primary/10' : 'bg-background'}`}
-                  onClick={() => handleBookSlot(slot)}
+                  onClick={() => setSelectedSlot(slot)} // Select first, then book via button
                 >
                   <div className="flex justify-between items-center">
                     <div>
@@ -190,11 +224,12 @@ export default function BookingPage() {
                       </p>
                     </div>
                     <Button 
+                      onClick={(e) => { e.stopPropagation(); handleBookSlot(slot); }} // Prevent card click, handle booking
                       variant={selectedSlot === slot ? "default" : "outline"} 
                       size="sm"
-                      disabled={!isConnected || !hasRequiredToken}
+                      disabled={!isConnected || !hasRequiredToken || isBooking || !creator || !creator.tokens || creator.tokens.length === 0}
                     >
-                      {selectedSlot === slot ? "Selected" : "Book Slot"}
+                      {isBooking && selectedSlot === slot ? <Loader2 className="h-4 w-4 animate-spin" /> : (selectedSlot === slot ? "Confirm Booking" : "Book Slot")}
                     </Button>
                   </div>
                 </Card>
