@@ -41,7 +41,8 @@
     "date-fns": "^3.6.0",
     "dotenv": "^16.5.0",
     "firebase": "^10.12.4",
-    "genkit": "^1.8.0",
+    "gapi-script": "^1.2.0",
+    "genkit": "latest",
     "lucide-react": "^0.475.0",
     "magic-sdk": "^21.5.0",
     "next": "15.2.3",
@@ -58,10 +59,11 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/gapi": "^0.0.47",
     "@types/node": "^20.14.18",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "genkit-cli": "^1.8.0",
+    "genkit-cli": "latest",
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.7",
     "typescript": "^5.5.4"

@@ -2,10 +2,11 @@
 'use client';
 
 import { Button } from "@/components/ui/button";
-import { CheckCircle, Loader2 } from "lucide-react"; // Added Loader2
-import { useState, useEffect } from "react";
+import { CheckCircle, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useActiveAccount } from "thirdweb/react";
+import { gapi } from 'gapi-script';
 
 // Inline SVGs for Google and Outlook logos
 const GoogleIcon = () => (
@@ -28,6 +29,13 @@ type ConnectionStatus = {
   outlook: boolean;
 };
 
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY; // Not typically needed for OAuth, but good for other GAPI calls
+const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events.readonly';
+// Ensure this matches exactly what's in Google Cloud Console
+const GOOGLE_REDIRECT_URI = typeof window !== 'undefined' ? `${window.location.origin}/api/auth/google/callback` : '';
+
+
 export function CalendarConnect() {
   const account = useActiveAccount();
   const address = account?.address;
@@ -37,24 +45,60 @@ export function CalendarConnect() {
   const [isFetchingStatus, setIsFetchingStatus] = useState(true);
   const [isUpdating, setIsUpdating] = useState<null | 'google' | 'outlook'>(null);
 
+  const updateConnectionStatus = useCallback(async (service: 'google' | 'outlook', connected: boolean) => {
+    if (!address) return;
+    try {
+      await fetch(`/api/calendar/connect/${service}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': address },
+        body: JSON.stringify({ connect: connected }),
+      });
+      setConnections(prev => ({ ...prev, [service]: connected }));
+      if (connected && service === 'google') {
+        // Store a flag or token (client-side for prototype) indicating Google is connected
+        localStorage.setItem(`google_calendar_connected_${address}`, 'true');
+      } else if (!connected && service === 'google') {
+        localStorage.removeItem(`google_calendar_connected_${address}`);
+        // Also sign out from Google if gapi is loaded and auth instance exists
+        if (window.gapi && window.gapi.auth2 && window.gapi.auth2.getAuthInstance()) {
+          window.gapi.auth2.getAuthInstance().signOut();
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to update ${service} connection status in mock DB:`, error);
+    }
+  }, [address]);
+
+
   useEffect(() => {
-    const fetchConnectionStatus = async () => {
+    const fetchConnectionStatusFromMockDB = async () => {
       if (address) {
         setIsFetchingStatus(true);
         try {
-          const response = await fetch(`/api/calendar/connect/status`, { // Assuming a general status endpoint
+          const response = await fetch(`/api/calendar/connect/status`, {
             headers: { 'x-user-id': address }
           });
           const data = await response.json();
           if (data.success && data.connections) {
             setConnections(data.connections);
+             // Check local storage for Google connection initiated by client-side OAuth
+            const googleConnectedClientSide = localStorage.getItem(`google_calendar_connected_${address}`) === 'true';
+            if (googleConnectedClientSide && !data.connections.google) {
+                // If client-side says connected but mock DB doesn't, update mock DB
+                // This handles the case after successful client-side OAuth redirect
+                await updateConnectionStatus('google', true);
+                setConnections(prev => ({ ...prev, google: true }));
+            } else if (!googleConnectedClientSide && data.connections.google) {
+                 // If mock DB says connected but client-side doesn't (e.g. after explicit disconnect)
+                localStorage.removeItem(`google_calendar_connected_${address}`);
+            }
+
           } else {
-            // Keep default false if fetch fails or no data
              setConnections({ google: false, outlook: false });
           }
         } catch (error) {
           console.error("Failed to fetch calendar connection status:", error);
-          setConnections({ google: false, outlook: false }); // Reset on error
+          setConnections({ google: false, outlook: false });
         } finally {
           setIsFetchingStatus(false);
         }
@@ -64,44 +108,119 @@ export function CalendarConnect() {
       }
     };
 
-    fetchConnectionStatus();
-  }, [address]);
+    fetchConnectionStatusFromMockDB();
+  }, [address, updateConnectionStatus]);
 
 
-  const handleToggleConnection = async (service: 'google' | 'outlook') => {
+  const initGoogleClient = useCallback((callback: () => void) => {
+    if (!GOOGLE_CLIENT_ID) {
+      toast({ title: "Google Client ID Missing", description: "Google Calendar integration is not configured.", variant: "destructive" });
+      setIsUpdating(null);
+      return;
+    }
+    gapi.load('client:auth2', () => {
+      gapi.client.init({
+        apiKey: GOOGLE_API_KEY, // May not be strictly necessary for OAuth token flow but good for discovery doc
+        clientId: GOOGLE_CLIENT_ID,
+        scope: GOOGLE_SCOPES,
+        discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"]
+      }).then(() => {
+        callback();
+      }).catch(error => {
+        console.error("Error initializing Google API client:", error);
+        toast({ title: "Google API Init Failed", description: "Could not initialize Google Calendar client.", variant: "destructive" });
+        setIsUpdating(null);
+      });
+    });
+  }, [toast]);
+
+  const handleGoogleConnect = () => {
     if (!address) {
       toast({ title: "Not Connected", description: "Please connect your wallet first.", variant: "destructive" });
       return;
     }
-    setIsUpdating(service);
-    const currentlyConnected = service === 'google' ? connections.google : connections.outlook;
-    const shouldConnect = !currentlyConnected;
+    setIsUpdating('google');
 
-    try {
-      const response = await fetch(`/api/calendar/connect/${service}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': address,
-        },
-        body: JSON.stringify({ connect: shouldConnect }),
-      });
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setConnections(prev => ({ ...prev, [service]: shouldConnect }));
-        toast({ title: `${service.charAt(0).toUpperCase() + service.slice(1)} Calendar ${shouldConnect ? 'Connected' : 'Disconnected'} (Mock)`, description: data.message });
-      } else {
-        throw new Error(data.message || `Failed to update ${service} connection`);
+    const attemptSignIn = () => {
+      const authInstance = gapi.auth2.getAuthInstance();
+      if (!authInstance) {
+        console.error("Google Auth instance not available after init.");
+        toast({ title: "Google Auth Error", description: "Failed to get Google Auth instance.", variant: "destructive" });
+        setIsUpdating(null);
+        return;
       }
-    } catch (error) {
-      console.error(`Error updating ${service} connection:`, error);
-      const errorMessage = error instanceof Error ? error.message : `An unknown error occurred.`;
-      toast({ title: `Update Failed (Mock)`, description: errorMessage, variant: "destructive" });
-    } finally {
-      setIsUpdating(null);
+
+      authInstance.signIn()
+        .then(async (googleUser) => {
+          // User signed in. The access token is available via googleUser.getAuthResponse().access_token
+          // This token can be used for client-side API calls.
+          // For production, you'd send an auth code to your backend from here (or via the redirect URI).
+          console.log('Google Sign-In successful', googleUser);
+          await updateConnectionStatus('google', true); // Update mock DB
+          toast({ title: "Google Calendar Connected (Client-side)", description: "Ready to fetch events."});
+          // Trigger a re-fetch or pass token to availability page if needed
+          if (typeof window !== 'undefined') {
+             // To notify availability page to re-fetch events
+             window.dispatchEvent(new Event('googleCalendarConnected'));
+          }
+        })
+        .catch(async (error) => {
+          console.error("Google Sign-In error:", error);
+          if (error.error === "popup_closed_by_user") {
+            toast({ title: "Google Sign-In Cancelled", description: "You closed the Google Sign-In popup.", variant: "default" });
+          } else if (error.error === "access_denied") {
+            toast({ title: "Google Access Denied", description: "You denied access to Google Calendar.", variant: "destructive" });
+          } else {
+            toast({ title: "Google Sign-In Failed", description: error.details || "Could not connect to Google Calendar.", variant: "destructive" });
+          }
+          await updateConnectionStatus('google', false);
+        })
+        .finally(() => {
+          setIsUpdating(null);
+        });
+    };
+
+    if (typeof window.gapi !== 'undefined' && typeof window.gapi.auth2 !== 'undefined' && window.gapi.auth2.getAuthInstance()) {
+       attemptSignIn();
+    } else {
+      initGoogleClient(attemptSignIn);
     }
   };
+
+  const handleGoogleDisconnect = async () => {
+    setIsUpdating('google');
+    try {
+      const authInstance = gapi.auth2?.getAuthInstance();
+      if (authInstance) {
+        await authInstance.signOut();
+      }
+    } catch (error) {
+      console.error("Error signing out from Google:", error);
+    } finally {
+      await updateConnectionStatus('google', false);
+      toast({ title: "Google Calendar Disconnected", description: "Your Google Calendar has been disconnected." });
+      setIsUpdating(null);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('googleCalendarDisconnected'));
+      }
+    }
+  };
+
+
+  const handleOutlookToggle = async () => {
+    if (!address) {
+      toast({ title: "Not Connected", description: "Please connect your wallet first.", variant: "destructive" });
+      return;
+    }
+    setIsUpdating('outlook');
+    const shouldConnect = !connections.outlook;
+    // Mock Outlook connection
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+    await updateConnectionStatus('outlook', shouldConnect);
+    toast({ title: `Outlook Calendar ${shouldConnect ? 'Connected' : 'Disconnected'} (Mock)`, description: `Mock status updated for Outlook.` });
+    setIsUpdating(null);
+  };
+
 
   if (isFetchingStatus) {
     return (
@@ -125,7 +244,7 @@ export function CalendarConnect() {
             <Button 
               variant="link" 
               size="sm" 
-              onClick={() => handleToggleConnection('google')} 
+              onClick={handleGoogleDisconnect} 
               className="text-destructive"
               disabled={isUpdating === 'google'}
             >
@@ -134,9 +253,10 @@ export function CalendarConnect() {
           </div>
         ) : (
           <Button 
-            onClick={() => handleToggleConnection('google')} 
+            onClick={handleGoogleConnect} 
             className="w-full justify-start bg-card hover:bg-muted/50 text-foreground border shadow-sm"
-            disabled={isUpdating === 'google' || !account}
+            disabled={isUpdating === 'google' || !account || !GOOGLE_CLIENT_ID}
+            title={!GOOGLE_CLIENT_ID ? "Google integration not configured by admin" : ""}
           >
             {isUpdating === 'google' ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <GoogleIcon />}
             {isUpdating === 'google' ? 'Connecting...' : 'Connect Google Calendar'}
@@ -154,7 +274,7 @@ export function CalendarConnect() {
             <Button 
               variant="link" 
               size="sm" 
-              onClick={() => handleToggleConnection('outlook')} 
+              onClick={handleOutlookToggle} 
               className="text-destructive"
               disabled={isUpdating === 'outlook'}
             >
@@ -163,20 +283,20 @@ export function CalendarConnect() {
           </div>
         ) : (
           <Button 
-            onClick={() => handleToggleConnection('outlook')} 
+            onClick={handleOutlookToggle} 
             className="w-full justify-start bg-card hover:bg-muted/50 text-foreground border shadow-sm"
             disabled={isUpdating === 'outlook' || !account}
           >
             {isUpdating === 'outlook' ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <OutlookIcon />}
-            {isUpdating === 'outlook' ? 'Connecting...' : 'Connect Outlook Calendar'}
+            {isUpdating === 'outlook' ? 'Connecting...' : 'Connect Outlook Calendar (Mock)'}
           </Button>
         )}
       </div>
-       {!connections.google && !connections.outlook && (
-        <p className="text-xs text-muted-foreground text-center pt-2">
-          Connect your calendar to automatically manage your booking availability.
-        </p>
-      )}
+       {!connections.google && !connections.outlook && !GOOGLE_CLIENT_ID && (
+          <p className="text-xs text-muted-foreground text-center pt-2">
+            Google Calendar integration is not configured by the administrator.
+          </p>
+       )}
        {(!account && (isUpdating === 'google' || isUpdating === 'outlook')) && (
         <p className="text-xs text-destructive text-center pt-2">
           Please connect your wallet to manage calendar integrations.
@@ -185,3 +305,4 @@ export function CalendarConnect() {
     </div>
   );
 }
+
