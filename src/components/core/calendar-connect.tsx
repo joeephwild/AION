@@ -2,10 +2,10 @@
 'use client';
 
 import { Button } from "@/components/ui/button";
-import { CheckCircle, XCircle } from "lucide-react";
+import { CheckCircle, Loader2 } from "lucide-react"; // Added Loader2
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useActiveAccount } from "thirdweb/react"; // For checking if user is logged in
+import { useActiveAccount } from "thirdweb/react";
 
 // Inline SVGs for Google and Outlook logos
 const GoogleIcon = () => (
@@ -23,121 +23,161 @@ const OutlookIcon = () => (
   </svg>
 );
 
+type ConnectionStatus = {
+  google: boolean;
+  outlook: boolean;
+};
 
 export function CalendarConnect() {
   const account = useActiveAccount();
+  const address = account?.address;
   const { toast } = useToast();
   
-  // These states would ideally be fetched from the backend based on user's actual connections
-  const [googleConnected, setGoogleConnected] = useState(false);
-  const [outlookConnected, setOutlookConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState<null | 'google' | 'outlook'>(null);
+  const [connections, setConnections] = useState<ConnectionStatus>({ google: false, outlook: false });
+  const [isFetchingStatus, setIsFetchingStatus] = useState(true);
+  const [isUpdating, setIsUpdating] = useState<null | 'google' | 'outlook'>(null);
 
-  // Effect to check existing connections when component mounts or user changes
-  // In a real app, this would fetch connection status from your backend
   useEffect(() => {
-    if (account) {
-      // mock fetch existing connection status
-      // e.g., fetchUserCalendarConnections(account.address).then(status => {
-      //   setGoogleConnected(status.google);
-      //   setOutlookConnected(status.outlook);
-      // });
-    } else {
-      setGoogleConnected(false);
-      setOutlookConnected(false);
-    }
-  }, [account]);
+    const fetchConnectionStatus = async () => {
+      if (address) {
+        setIsFetchingStatus(true);
+        try {
+          const response = await fetch(`/api/calendar/connect/status`, { // Assuming a general status endpoint
+            headers: { 'x-user-id': address }
+          });
+          const data = await response.json();
+          if (data.success && data.connections) {
+            setConnections(data.connections);
+          } else {
+            // Keep default false if fetch fails or no data
+             setConnections({ google: false, outlook: false });
+          }
+        } catch (error) {
+          console.error("Failed to fetch calendar connection status:", error);
+          setConnections({ google: false, outlook: false }); // Reset on error
+        } finally {
+          setIsFetchingStatus(false);
+        }
+      } else {
+        setConnections({ google: false, outlook: false });
+        setIsFetchingStatus(false);
+      }
+    };
+
+    fetchConnectionStatus();
+  }, [address]);
 
 
-  const handleConnect = async (service: 'google' | 'outlook') => {
-    if (!account) {
+  const handleToggleConnection = async (service: 'google' | 'outlook') => {
+    if (!address) {
       toast({ title: "Not Connected", description: "Please connect your wallet first.", variant: "destructive" });
       return;
     }
-    setIsConnecting(service);
+    setIsUpdating(service);
+    const currentlyConnected = service === 'google' ? connections.google : connections.outlook;
+    const shouldConnect = !currentlyConnected;
+
     try {
-      const response = await fetch(`/api/calendar/connect/${service}`);
+      const response = await fetch(`/api/calendar/connect/${service}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': address,
+        },
+        body: JSON.stringify({ connect: shouldConnect }),
+      });
       const data = await response.json();
 
       if (response.ok && data.success) {
-        if (service === 'google') {
-          setGoogleConnected(true);
-        } else {
-          setOutlookConnected(true);
-        }
-        toast({ title: `${service.charAt(0).toUpperCase() + service.slice(1)} Calendar Connected (Mock)`, description: data.message });
-        // In a real OAuth flow, the API route would handle the redirect.
-        // If data.mockAuthUrl was returned and used: window.location.href = data.mockAuthUrl;
+        setConnections(prev => ({ ...prev, [service]: shouldConnect }));
+        toast({ title: `${service.charAt(0).toUpperCase() + service.slice(1)} Calendar ${shouldConnect ? 'Connected' : 'Disconnected'} (Mock)`, description: data.message });
       } else {
-        throw new Error(data.message || `Failed to connect to ${service}`);
+        throw new Error(data.message || `Failed to update ${service} connection`);
       }
     } catch (error) {
-      console.error(`Error connecting to ${service}:`, error);
-      const errorMessage = error instanceof Error ? error.message : `An unknown error occurred while connecting to ${service}.`;
-      toast({ title: `Connection Failed (Mock)`, description: errorMessage, variant: "destructive" });
+      console.error(`Error updating ${service} connection:`, error);
+      const errorMessage = error instanceof Error ? error.message : `An unknown error occurred.`;
+      toast({ title: `Update Failed (Mock)`, description: errorMessage, variant: "destructive" });
     } finally {
-      setIsConnecting(null);
+      setIsUpdating(null);
     }
   };
 
-  const handleDisconnect = (service: 'google' | 'outlook') => {
-    // In a real app, this would call an API to revoke tokens and update backend
-    if (service === 'google') {
-      setGoogleConnected(false);
-    } else {
-      setOutlookConnected(false);
-    }
-    toast({ title: `${service.charAt(0).toUpperCase() + service.slice(1)} Calendar Disconnected (Mock)`, variant: "destructive" });
-  };
+  if (isFetchingStatus) {
+    return (
+      <div className="flex items-center justify-center p-4">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <span className="ml-2 text-muted-foreground">Loading connection status...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       <div>
-        {googleConnected ? (
+        {connections.google ? (
           <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
             <div className="flex items-center">
               <GoogleIcon />
               <span>Google Calendar Connected</span>
               <CheckCircle className="ml-2 h-5 w-5 text-green-500" />
             </div>
-            <Button variant="link" size="sm" onClick={() => handleDisconnect('google')} className="text-destructive">Disconnect</Button>
+            <Button 
+              variant="link" 
+              size="sm" 
+              onClick={() => handleToggleConnection('google')} 
+              className="text-destructive"
+              disabled={isUpdating === 'google'}
+            >
+              {isUpdating === 'google' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Disconnect'}
+            </Button>
           </div>
         ) : (
           <Button 
-            onClick={() => handleConnect('google')} 
+            onClick={() => handleToggleConnection('google')} 
             className="w-full justify-start bg-card hover:bg-muted/50 text-foreground border shadow-sm"
-            disabled={isConnecting === 'google' || !account}
+            disabled={isUpdating === 'google' || !account}
           >
-            <GoogleIcon /> {isConnecting === 'google' ? 'Connecting...' : 'Connect Google Calendar'}
+            {isUpdating === 'google' ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <GoogleIcon />}
+            {isUpdating === 'google' ? 'Connecting...' : 'Connect Google Calendar'}
           </Button>
         )}
       </div>
       <div>
-        {outlookConnected ? (
+        {connections.outlook ? (
           <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
             <div className="flex items-center">
               <OutlookIcon />
               <span>Outlook Calendar Connected</span>
               <CheckCircle className="ml-2 h-5 w-5 text-green-500" />
             </div>
-            <Button variant="link" size="sm" onClick={() => handleDisconnect('outlook')} className="text-destructive">Disconnect</Button>
+            <Button 
+              variant="link" 
+              size="sm" 
+              onClick={() => handleToggleConnection('outlook')} 
+              className="text-destructive"
+              disabled={isUpdating === 'outlook'}
+            >
+              {isUpdating === 'outlook' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Disconnect'}
+            </Button>
           </div>
         ) : (
           <Button 
-            onClick={() => handleConnect('outlook')} 
+            onClick={() => handleToggleConnection('outlook')} 
             className="w-full justify-start bg-card hover:bg-muted/50 text-foreground border shadow-sm"
-            disabled={isConnecting === 'outlook' || !account}
+            disabled={isUpdating === 'outlook' || !account}
           >
-            <OutlookIcon /> {isConnecting === 'outlook' ? 'Connecting...' : 'Connect Outlook Calendar'}
+            {isUpdating === 'outlook' ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <OutlookIcon />}
+            {isUpdating === 'outlook' ? 'Connecting...' : 'Connect Outlook Calendar'}
           </Button>
         )}
       </div>
-       {!googleConnected && !outlookConnected && (
+       {!connections.google && !connections.outlook && (
         <p className="text-xs text-muted-foreground text-center pt-2">
           Connect your calendar to automatically manage your booking availability.
         </p>
       )}
-       {(!account && (isConnecting === 'google' || isConnecting === 'outlook')) && (
+       {(!account && (isUpdating === 'google' || isUpdating === 'outlook')) && (
         <p className="text-xs text-destructive text-center pt-2">
           Please connect your wallet to manage calendar integrations.
         </p>

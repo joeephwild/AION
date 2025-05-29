@@ -2,33 +2,112 @@
 // /src/app/api/calendar/connect/[service]/route.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import fs from 'fs/promises';
+import path from 'path';
 
-export async function GET(
+const dbPath = path.join(process.cwd(), 'data', 'mock-db.json');
+
+type UserData = {
+  availabilitySettings?: any; // Replace with actual type if defined
+  calendarConnections?: {
+    google?: boolean;
+    outlook?: boolean;
+  };
+  // other user properties
+};
+
+type DbData = {
+  users: Record<string, UserData>;
+  bookings: any[]; // Replace with actual type if defined
+};
+
+
+async function readDb(): Promise<DbData> {
+  try {
+    const data = await fs.readFile(dbPath, 'utf-8');
+    const parsedData = JSON.parse(data);
+    // Ensure users object exists
+    if (!parsedData.users) {
+      parsedData.users = {};
+    }
+    return parsedData;
+  } catch (error) {
+    return { users: {}, bookings: [] };
+  }
+}
+
+async function writeDb(data: DbData): Promise<void> {
+  await fs.writeFile(dbPath, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+export async function POST(
   request: NextRequest,
   { params }: { params: { service: string } }
 ) {
   const service = params.service;
+  const userId = request.headers.get('x-user-id');
 
+  if (!userId) {
+    return NextResponse.json({ success: false, message: 'x-user-id header is required' }, { status: 400 });
+  }
   if (service !== 'google' && service !== 'outlook') {
     return NextResponse.json({ success: false, message: 'Invalid service provider.' }, { status: 400 });
   }
 
-  // In a real application, you would:
-  // 1. Generate a CSRF token (state parameter) and store it (e.g., in a session or short-lived DB entry).
-  // 2. Construct the full authorization URL for the specific service.
-  // 3. Redirect the user to that URL: return NextResponse.redirect(authorizationUrl);
-  // For this prototype, we'll just log and return a mock success.
+  try {
+    const { connect } = await request.json(); // Expecting a 'connect: true/false' in body
+    const db = await readDb();
 
-  console.log(`Initiating mock OAuth connection for: ${service}`);
+    if (!db.users[userId]) {
+      db.users[userId] = {};
+    }
+    if (!db.users[userId].calendarConnections) {
+      db.users[userId].calendarConnections = { google: false, outlook: false };
+    }
 
-  // Simulate constructing a redirect URL (optional for the client to use if we were doing a real redirect)
-  const mockRedirectUri = `${request.nextUrl.origin}/api/calendar/callback/${service}`;
-  const mockAuthUrl = `https://accounts.${service}.com/o/oauth2/v2/auth?client_id=MOCK_CLIENT_ID_${service.toUpperCase()}&redirect_uri=${encodeURIComponent(mockRedirectUri)}&response_type=code&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.readonly&access_type=offline&prompt=consent&state=MOCK_CSRF_STATE`;
+    if (service === 'google') {
+      db.users[userId].calendarConnections!.google = connect;
+    } else if (service === 'outlook') {
+      db.users[userId].calendarConnections!.outlook = connect;
+    }
 
-  return NextResponse.json({
-    success: true,
-    message: `Mock connection to ${service} initiated. In a real app, you would be redirected.`,
-    service: service,
-    // mockAuthUrl: mockAuthUrl, // Client could use this if we wanted to simulate the redirect
-  });
+    await writeDb(db);
+
+    return NextResponse.json({
+      success: true,
+      message: `Mock connection to ${service} ${connect ? 'established' : 'disconnected'}. Status updated.`,
+      service: service,
+      connected: connect,
+    });
+
+  } catch (error) {
+    console.error(`Failed to update ${service} connection status:`, error);
+    return NextResponse.json({ success: false, message: 'Failed to update connection status' }, { status: 500 });
+  }
+}
+
+// GET method to fetch current connection status
+export async function GET(
+  request: NextRequest
+) {
+  const userId = request.headers.get('x-user-id');
+
+  if (!userId) {
+    return NextResponse.json({ success: false, message: 'x-user-id header is required' }, { status: 400 });
+  }
+
+  try {
+    const db = await readDb();
+    const user = db.users[userId];
+    const connections = user?.calendarConnections || { google: false, outlook: false };
+    
+    return NextResponse.json({
+      success: true,
+      connections,
+    });
+
+  } catch (error) {
+    console.error('Failed to fetch calendar connection status:', error);
+    return NextResponse.json({ success: false, message: 'Failed to fetch connection status' }, { status: 500 });
+  }
 }
