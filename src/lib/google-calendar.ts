@@ -1,5 +1,4 @@
 
-// /src/lib/google-calendar.ts
 import ApiCalendar from 'react-google-calendar-api';
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;

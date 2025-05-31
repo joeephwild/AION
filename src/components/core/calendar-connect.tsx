@@ -50,8 +50,6 @@ export function CalendarConnect() {
         headers: { 'Content-Type': 'application/json', 'x-user-id': address },
         body: JSON.stringify({ connect: connected }),
       });
-      // Local state 'connections' will be updated by the listenSign callback for Google
-      // or directly for Outlook.
     } catch (error) {
       console.error(`Failed to update ${service} connection status in mock DB:`, error);
     }
@@ -67,14 +65,13 @@ export function CalendarConnect() {
           });
           const data = await response.json();
           if (data.success && data.connections) {
-            // Set Outlook status from DB. Google status will be set by listenSign.
             setConnections(prev => ({...prev, outlook: data.connections.outlook}));
           }
         } catch (error) {
           console.error("Failed to fetch calendar connection status:", error);
-          setConnections(prev => ({...prev, outlook: false}));
+          setConnections(prev => ({...prev, outlook: false})); // Default to false on error
         } finally {
-          setIsFetchingStatus(false); // Still set to false, Google will update separately
+          setIsFetchingStatus(false);
         }
       } else {
         setConnections({ google: false, outlook: false });
@@ -86,41 +83,68 @@ export function CalendarConnect() {
 
 
   useEffect(() => {
-    if (!apiCalendar || !GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) return;
+    if (!address) {
+        setIsGoogleApiLoaded(false);
+        setConnections(prev => ({ ...prev, google: false }));
+        return;
+    }
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
+        console.warn("CalendarConnect: Google Client ID or API Key is missing. Google integration disabled.");
+        setIsGoogleApiLoaded(false);
+        return;
+    }
+
+    if (!apiCalendar || typeof apiCalendar.onLoad !== 'function') {
+        console.error("CalendarConnect: apiCalendar object or apiCalendar.onLoad method is not available.", { currentApiCalendar: apiCalendar });
+        setIsGoogleApiLoaded(false);
+        return;
+    }
 
     const handleSign = (signedIn: boolean) => {
       setConnections(prev => ({ ...prev, google: signedIn }));
-      setIsUpdating(null);
+      setIsUpdating(null); // Reset loading state for Google
       if (signedIn) {
         updateConnectionStatusInMockDB('google', true);
         localStorage.setItem(`google_calendar_connected_${address}`, 'true');
         window.dispatchEvent(new Event('googleCalendarConnected'));
         toast({ title: "Google Calendar Connected", description: "Ready to fetch events."});
       } else {
-        // This part might be called on initial load if not signed in, or after explicit sign out.
-        // Avoid showing "disconnected" toast on initial load if user was never connected.
-        if (localStorage.getItem(`google_calendar_connected_${address}`) === 'true') {
-           toast({ title: "Google Calendar Disconnected", description: "Your Google Calendar has been disconnected." });
-        }
+        const wasPreviouslyConnected = localStorage.getItem(`google_calendar_connected_${address}`) === 'true';
         updateConnectionStatusInMockDB('google', false);
         localStorage.removeItem(`google_calendar_connected_${address}`);
         window.dispatchEvent(new Event('googleCalendarDisconnected'));
+        if (wasPreviouslyConnected) { // Only toast disconnect if it was genuinely connected before
+           toast({ title: "Google Calendar Disconnected", description: "Your Google Calendar has been disconnected." });
+        }
       }
     };
     
-    // apiCalendar.onLoad is supposed to be called when gapi is ready
     apiCalendar.onLoad(() => {
-      setIsGoogleApiLoaded(true);
-      apiCalendar.listenSign(handleSign);
-      // Check initial sign-in state provided by the library
-      if (apiCalendar.sign) {
-         handleSign(true); // Manually trigger if already signed in
+      setIsGoogleApiLoaded(true); // GAPI infrastructure is ready
+      if (typeof apiCalendar.listenSign === 'function') {
+        apiCalendar.listenSign(handleSign);
+        // Check initial sign-in state from the library
+        // The `apiCalendar.sign` property might take a moment to update after gapi loads.
+        // listenSign's callback should correctly set the initial state.
+        // Forcing an immediate check can sometimes be racy if gapi.auth2 isn't fully ready.
+        // The library's internal listenSign usually handles the initial state correctly.
+        // We can check apiCalendar.sign after a brief delay or rely on the first callback from listenSign.
+        setTimeout(() => { // Slight delay to allow library's internal `sign` state to settle
+          if (typeof apiCalendar.sign === 'boolean') {
+            if (apiCalendar.sign !== connections.google) { // Sync if different from current state
+                handleSign(apiCalendar.sign);
+            }
+          } else {
+             console.warn("CalendarConnect: apiCalendar.sign is not a boolean. Initial state might be inaccurate.");
+          }
+        }, 100);
+
       } else {
-         handleSign(false); // Ensure correct initial state if not signed in
+        console.error("CalendarConnect: apiCalendar.listenSign is not a function after GAPI onLoad.", { apiCalendarObj: apiCalendar });
+        handleSign(false); // Assume not signed in if listenSign is not available
       }
     });
-    // The library doesn't provide an unlisten method in basic docs, assuming it handles cleanup.
-  }, [address, toast, updateConnectionStatusInMockDB]);
+  }, [address, toast, updateConnectionStatusInMockDB, connections.google]); // Added connections.google to re-sync if needed
 
 
   const handleGoogleConnect = () => {
@@ -132,34 +156,32 @@ export function CalendarConnect() {
       toast({ title: "Google Not Configured", description: "Google Calendar integration is not configured by the admin.", variant: "destructive" });
       return;
     }
-    if (!isGoogleApiLoaded) {
-      toast({ title: "Google API Loading", description: "Please wait for Google API to load.", variant: "default" });
+    if (!isGoogleApiLoaded || !apiCalendar || typeof apiCalendar.handleAuthClick !== 'function') {
+      toast({ title: "Google API Not Ready", description: "Please wait for Google API to load or check configuration.", variant: "default" });
+      console.error("Google API not ready for handleAuthClick", {isGoogleApiLoaded, apiCalendar});
       return;
     }
     setIsUpdating('google');
     apiCalendar.handleAuthClick().catch((error: any) => {
-      // Error handling for handleAuthClick itself, e.g. popup closed
       console.error("Google Sign-In flow error:", error);
-      if (error && (error.type === "popup_closed_by_user" || error.message?.includes("popup_closed_by_user"))) {
+      const errorMessage = error?.error || (error instanceof Error ? error.message : "Unknown error during Google Sign-In.");
+      if (errorMessage.includes("popup_closed_by_user")) {
         toast({ title: "Google Sign-In Cancelled", description: "You closed the Google Sign-In popup." });
-      } else if (error && error.type === "access_denied") {
+      } else if (errorMessage.includes("access_denied")) {
          toast({ title: "Google Access Denied", description: "You denied access to Google Calendar.", variant: "destructive" });
       } else {
-        toast({ title: "Google Sign-In Failed", description: "Could not connect to Google Calendar.", variant: "destructive" });
+        toast({ title: "Google Sign-In Failed", description: `Could not connect to Google Calendar: ${errorMessage}`, variant: "destructive" });
       }
-      setIsUpdating(null); // Reset loading state on explicit error from handleAuthClick
-      setConnections(prev => ({ ...prev, google: false })); // Ensure UI reflects failure
-      updateConnectionStatusInMockDB('google', false);
-      localStorage.removeItem(`google_calendar_connected_${address}`);
+      setIsUpdating(null); 
+      handleSign(false); // Ensure UI reflects failure by calling handleSign
     });
   };
 
   const handleGoogleDisconnect = async () => {
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) return;
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY || !apiCalendar || typeof apiCalendar.handleSignoutClick !== 'function') return;
     setIsUpdating('google');
     apiCalendar.handleSignoutClick();
-    // The listenSign callback will handle state updates and toasts.
-    // setIsUpdating(null) will be called by listenSign.
+    // The listenSign callback in useEffect will handle other state updates and toasts.
   };
 
 
@@ -170,35 +192,28 @@ export function CalendarConnect() {
     }
     setIsUpdating('outlook');
     const shouldConnect = !connections.outlook;
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
+    // Simulate API call for mock
+    await new Promise(resolve => setTimeout(resolve, 1000)); 
+    // Update mock DB
     await updateConnectionStatusInMockDB('outlook', shouldConnect);
+    // Update local state
     setConnections(prev => ({ ...prev, outlook: shouldConnect }));
     toast({ title: `Outlook Calendar ${shouldConnect ? 'Connected (Mock)' : 'Disconnected (Mock)'}`, description: `Mock status updated for Outlook.` });
     setIsUpdating(null);
   };
 
-  const isLoading = isFetchingStatus || (isUpdating === 'google' && !isGoogleApiLoaded);
+  // Combined loading state for initial phase
+  const isLoadingInitial = isFetchingStatus || (isUpdating === 'google' && !isGoogleApiLoaded && !!GOOGLE_CLIENT_ID && !!GOOGLE_API_KEY);
 
-
-  if (isLoading && !isGoogleApiLoaded && GOOGLE_CLIENT_ID && GOOGLE_API_KEY) {
+  if (isLoadingInitial) {
     return (
       <div className="flex items-center justify-center p-4">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        <span className="ml-2 text-muted-foreground">Loading Google API...</span>
+        <span className="ml-2 text-muted-foreground">Loading calendar connections...</span>
       </div>
     );
   }
   
-  if (isFetchingStatus && !address) {
-     return (
-      <div className="flex items-center justify-center p-4">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        <span className="ml-2 text-muted-foreground">Loading connection status...</span>
-      </div>
-    );
-  }
-
-
   return (
     <div className="space-y-4">
       <div>
@@ -226,11 +241,12 @@ export function CalendarConnect() {
             disabled={isUpdating === 'google' || !account || !GOOGLE_CLIENT_ID || !GOOGLE_API_KEY || !isGoogleApiLoaded}
             title={(!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) ? "Google integration not configured by admin" : (!isGoogleApiLoaded ? "Google API still loading..." : "Connect Google Calendar")}
           >
-            {isUpdating === 'google' ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <GoogleIcon />}
-            {isUpdating === 'google' ? 'Connecting...' : 'Connect Google Calendar'}
+            {(isUpdating === 'google' && isGoogleApiLoaded) ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <GoogleIcon />}
+            {(isUpdating === 'google' && isGoogleApiLoaded) ? 'Connecting...' : 'Connect Google Calendar'}
+            {!isGoogleApiLoaded && GOOGLE_CLIENT_ID && GOOGLE_API_KEY && <span className="text-xs ml-auto">(API Loading...)</span>}
           </Button>
         )}
-         {!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY && (
+         {(!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) && (
            <p className="text-xs text-muted-foreground text-center pt-1">Google Calendar integration not configured.</p>
          )}
       </div>
