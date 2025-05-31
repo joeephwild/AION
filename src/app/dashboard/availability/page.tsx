@@ -56,14 +56,14 @@ export default function AvailabilityPage() {
   const fetchGoogleCalendarEvents = useCallback(async () => {
     if (!isGoogleSignedIn || !apiCalendar || !GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
       setGoogleCalendarEvents([]);
-      if (isGoogleSignedIn && !apiCalendar) {
-        console.warn("fetchGoogleCalendarEvents: apiCalendar is null/undefined.");
+      if (isGoogleSignedIn && (!apiCalendar || typeof apiCalendar.listUpcomingEvents !== 'function')) {
+        console.warn("fetchGoogleCalendarEvents: apiCalendar or listUpcomingEvents is not available when expected.");
       }
       return;
     }
 
     if (typeof apiCalendar.listUpcomingEvents !== 'function') {
-      console.error("fetchGoogleCalendarEvents: apiCalendar.listUpcomingEvents is not a function.", apiCalendar);
+      console.error("fetchGoogleCalendarEvents: apiCalendar.listUpcomingEvents is not a function.", { currentApiCalendar: apiCalendar });
       toast({ title: "Error Fetching Google Events", description: "Calendar library function not available.", variant: "destructive" });
       setGoogleCalendarEvents([]);
       return;
@@ -73,7 +73,7 @@ export default function AvailabilityPage() {
     try {
       console.log("Attempting to fetch Google Calendar events...");
       const response: any = await apiCalendar.listUpcomingEvents(10);
-      console.log("Google Calendar API response:", response);
+      console.log("Google Calendar API raw response:", response);
 
       if (response && response.result && Array.isArray(response.result.items)) {
         const events = response.result.items.map((event: any) => ({
@@ -84,19 +84,47 @@ export default function AvailabilityPage() {
         }));
         setGoogleCalendarEvents(events);
         console.log("Fetched Google Calendar events:", events);
+      } else if (response && response.result && response.result.error) {
+        // Handle specific Google API error structure if present in response.result
+        const err = response.result.error;
+        const errorMessage = err.message || "Unknown error from Google Calendar API.";
+        console.error('Google Calendar API returned an error in response.result:', err);
+        toast({ title: "Google Calendar API Error", description: errorMessage, variant: "destructive" });
+        setGoogleCalendarEvents([]);
       } else {
-        console.warn("Google Calendar API response did not contain expected items array:", response);
+        console.warn("Google Calendar API response did not contain expected items array or error structure:", response);
         toast({ title: "No Google Events", description: "No upcoming events found or response malformed.", variant: "default" });
         setGoogleCalendarEvents([]);
       }
-    } catch (error) {
-      console.error('Error fetching Google Calendar events:', error);
+    } catch (error: any) {
+      console.error('Error fetching Google Calendar events (raw error):', error);
       let description = "Could not load Google Calendar events.";
+      let detailedError = "";
+
       if (error instanceof Error) {
         description = error.message;
-      } else if (typeof error === 'object' && error !== null && 'error' in error) {
-        description = (error as any).error.message || description;
+        detailedError = error.stack || "";
+      } else if (typeof error === 'object' && error !== null) {
+        if (error.result && error.result.error && error.result.error.message) {
+          description = error.result.error.message; // Common Google API error structure
+        } else if (error.message) {
+          description = error.message;
+        } else if (error.error && typeof error.error === 'object' && error.error.message) {
+          description = error.error.message; // Another possible structure
+        } else if (error.error && typeof error.error === 'string') {
+            description = error.error;
+        }
+        try {
+          detailedError = JSON.stringify(error, Object.getOwnPropertyNames(error));
+        } catch (e) {
+          detailedError = "Could not stringify error object.";
+        }
+      } else if (typeof error === 'string') {
+        description = error;
+        detailedError = error;
       }
+      
+      console.error('Processed error details:', { description, detailedError });
       toast({ title: "Error Fetching Google Events", description, variant: "destructive" });
       setGoogleCalendarEvents([]);
     } finally {
@@ -181,18 +209,19 @@ export default function AvailabilityPage() {
         if (initiallyConnected) {
              console.log("AvailabilityPage: Google initially connected via localStorage.");
              setIsGoogleSignedIn(true);
-             if (apiCalendar.sign !== undefined) {
-                 if(apiCalendar.sign) {
+             // Check if apiCalendar.sign is defined and true (library initialized and user signed in)
+            if (apiCalendar && typeof apiCalendar.sign === 'boolean') {
+                if (apiCalendar.sign) {
                     console.log("AvailabilityPage: apiCalendar.sign is true, fetching events.");
                     fetchGoogleCalendarEvents();
-                 } else {
+                } else {
                     console.log("AvailabilityPage: apiCalendar.sign is false despite localStorage true. Resetting.");
                     localStorage.removeItem(`google_calendar_connected_${address}`);
                     setIsGoogleSignedIn(false);
-                 }
+                }
             } else {
-                console.log("AvailabilityPage: apiCalendar.sign undefined, waiting for onLoad in CalendarConnect.");
-                 // CalendarConnect's useEffect will handle onLoad and potentially trigger fetchGoogleCalendarEvents
+                console.log("AvailabilityPage: apiCalendar.sign undefined or not boolean, waiting for onLoad in CalendarConnect.");
+                // CalendarConnect's useEffect will handle onLoad and potentially trigger fetchGoogleCalendarEvents
             }
         }
 
@@ -424,3 +453,6 @@ export default function AvailabilityPage() {
     </div>
   );
 }
+
+
+    
