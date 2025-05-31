@@ -32,9 +32,7 @@ if (typeof window !== 'undefined') { // Ensure this runs only on the client-side
       // @ts-ignore partial mock
       listUpcomingEvents: () => { console.error("Google Calendar not configured."); return Promise.resolve({ result: { items: [] } }); },
       // @ts-ignore partial mock
-      onLoad: (callback: () => void) => { if (typeof callback === 'function') callback(); }, // Call onload immediately for mock
-      // @ts-ignore partial mock
-      listenSign: (callback: (sign: boolean) => void) => { if (typeof callback === 'function') callback(false); }, // Assume not signed in for mock
+      onLoad: (callback: () => void) => { if (typeof callback === 'function') setTimeout(callback, 0); }, // Call onload async for mock
       sign: false, // Mock property
     } as ApiCalendar;
   }
@@ -45,10 +43,10 @@ if (typeof window !== 'undefined') { // Ensure this runs only on the client-side
       handleSignoutClick: () => {},
       listUpcomingEvents: () => Promise.resolve({ result: { items: [] } }),
       onLoad: (callback: () => void) => {},
-      listenSign: (callback: (sign: boolean) => void) => {},
       sign: false,
     } as any; // Cast to any for simplicity for server-side mock
 }
 
 
 export const apiCalendar = apiCalendarInstance;
+
