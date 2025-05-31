@@ -7,16 +7,38 @@ const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 let apiCalendarInstance: ApiCalendar | null = null;
 
 if (typeof window !== 'undefined') { // Ensure this runs only on the client-side
-  if (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
+  let useMock = false;
+  let mockReason = "";
+
+  if (!GOOGLE_CLIENT_ID) {
+    useMock = true;
+    mockReason = "Google Client ID is missing.";
+  }
+  if (!GOOGLE_API_KEY) {
+    useMock = true;
+    mockReason = mockReason ? `${mockReason} Google API Key is missing.` : "Google API Key is missing.";
+  } else if (GOOGLE_API_KEY.startsWith('GOCSPX-')) {
+    // Force mock and issue a strong warning if API Key looks like a Client Secret
+    useMock = true; 
     console.warn(
-      'Google Client ID or API Key is missing in .env.local. Google Calendar integration will be disabled. Using mock.'
+      "CRITICAL WARNING: Your NEXT_PUBLIC_GOOGLE_API_KEY appears to be a Google Client Secret (it starts with 'GOCSPX-'). " +
+      "This is a severe security risk if exposed client-side and is NOT the correct type of key for the 'apiKey' field. " +
+      "Please replace it with a proper Google API Key (usually starting with 'AIza...') from the Google Cloud Console. " +
+      "Forcing mock Google Calendar integration to prevent errors and mitigate security risks."
     );
-    // Provide a mock/stub if not configured
+    // mockReason can be augmented if other reasons also exist, but the GOCSPX- is overriding.
+    mockReason = "Potentially incorrect Google API Key (Client Secret detected)."; 
+  }
+
+  if (useMock) {
+    console.warn(
+      `${mockReason} Google Calendar integration will be disabled. Using mock.`
+    );
     apiCalendarInstance = {
-      handleAuthClick: () => { console.error("Google Calendar not configured (mock)."); return Promise.reject("Not configured"); },
-      handleSignoutClick: () => { console.error("Google Calendar not configured (mock)."); },
+      handleAuthClick: () => { console.error("Google Calendar not configured or mock active."); return Promise.reject("Not configured or mock active"); },
+      handleSignoutClick: () => { console.error("Google Calendar not configured or mock active."); },
       listUpcomingEvents: (maxResults: number) => {
-        console.error("Google Calendar not configured (mock). Returning empty events list.");
+        console.log("Google Calendar mock: listUpcomingEvents called. Returning empty events list.");
         return Promise.resolve({ result: { items: [] } });
       },
       onLoad: (callback: () => void) => {
@@ -24,18 +46,12 @@ if (typeof window !== 'undefined') { // Ensure this runs only on the client-side
         if (typeof callback === 'function') setTimeout(callback, 0);
       },
       sign: false,
-      // Add any other methods that might be called from your code with appropriate mocks
-      // For example, if you were to use createEvent:
-      // createEvent: (event: object, calendarId?: string) => {
-      //   console.error("Google Calendar not configured (mock). Cannot create event.");
-      //   return Promise.reject("Cannot create event - mock instance");
-      // }
-    } as unknown as ApiCalendar; // Use unknown to bypass strict type checking for the mock
+    } as unknown as ApiCalendar;
   } else {
-    // Instantiate the real ApiCalendar only if credentials are provided
+    // Both GOOGLE_CLIENT_ID and a non-GOCSPX GOOGLE_API_KEY are present
     const config = {
-      clientId: GOOGLE_CLIENT_ID,
-      apiKey: GOOGLE_API_KEY,
+      clientId: GOOGLE_CLIENT_ID!, // Assert non-null as checks passed
+      apiKey: GOOGLE_API_KEY!,   // Assert non-null
       scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events.readonly',
       discoveryDocs: [
         'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest',
@@ -45,8 +61,9 @@ if (typeof window !== 'undefined') { // Ensure this runs only on the client-side
       apiCalendarInstance = new ApiCalendar(config);
       console.log("Real ApiCalendar instance created.");
     } catch (e) {
-      console.error("Error instantiating real ApiCalendar:", e);
-      // Fallback to mock if instantiation fails
+      console.error("Error instantiating real ApiCalendar with provided credentials:", e);
+      console.warn("Falling back to mock Google Calendar due to instantiation error.");
+      // Fallback to mock if instantiation fails even with seemingly correct keys
       apiCalendarInstance = {
         handleAuthClick: () => Promise.reject("Real ApiCalendar instantiation failed"),
         handleSignoutClick: () => {},
