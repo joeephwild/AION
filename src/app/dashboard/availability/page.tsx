@@ -51,16 +51,30 @@ export default function AvailabilityPage() {
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState<CalendarEvent[]>([]);
   const [outlookCalendarEvents, setOutlookCalendarEvents] = useState<CalendarEvent[]>([]); 
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
-  const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(false); // Local state to track sign-in for fetching
+  const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(false);
 
   const fetchGoogleCalendarEvents = useCallback(async () => {
     if (!isGoogleSignedIn || !apiCalendar || !GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
       setGoogleCalendarEvents([]);
+      if (isGoogleSignedIn && !apiCalendar) {
+        console.warn("fetchGoogleCalendarEvents: apiCalendar is null/undefined.");
+      }
       return;
     }
+
+    if (typeof apiCalendar.listUpcomingEvents !== 'function') {
+      console.error("fetchGoogleCalendarEvents: apiCalendar.listUpcomingEvents is not a function.", apiCalendar);
+      toast({ title: "Error Fetching Google Events", description: "Calendar library function not available.", variant: "destructive" });
+      setGoogleCalendarEvents([]);
+      return;
+    }
+
     setIsLoadingEvents(true);
     try {
+      console.log("Attempting to fetch Google Calendar events...");
       const response: any = await apiCalendar.listUpcomingEvents(10);
+      console.log("Google Calendar API response:", response);
+
       if (response && response.result && Array.isArray(response.result.items)) {
         const events = response.result.items.map((event: any) => ({
           title: event.summary || 'No Title (Google)',
@@ -69,12 +83,21 @@ export default function AvailabilityPage() {
           isAllDay: !!event.start.date,
         }));
         setGoogleCalendarEvents(events);
+        console.log("Fetched Google Calendar events:", events);
       } else {
+        console.warn("Google Calendar API response did not contain expected items array:", response);
+        toast({ title: "No Google Events", description: "No upcoming events found or response malformed.", variant: "default" });
         setGoogleCalendarEvents([]);
       }
     } catch (error) {
       console.error('Error fetching Google Calendar events:', error);
-      toast({ title: "Error Fetching Google Events", description: "Could not load Google Calendar events.", variant: "destructive" });
+      let description = "Could not load Google Calendar events.";
+      if (error instanceof Error) {
+        description = error.message;
+      } else if (typeof error === 'object' && error !== null && 'error' in error) {
+        description = (error as any).error.message || description;
+      }
+      toast({ title: "Error Fetching Google Events", description, variant: "destructive" });
       setGoogleCalendarEvents([]);
     } finally {
       setIsLoadingEvents(false);
@@ -93,8 +116,6 @@ export default function AvailabilityPage() {
             setWorkingHours(data.settings.workingHours);
             setBufferTime(data.settings.bufferTime);
             setMinNoticeTime(data.settings.minNoticeTime);
-          } else {
-            // Keep default if no settings found
           }
         } catch (error) {
           console.error("Failed to fetch availability settings:", error);
@@ -118,13 +139,12 @@ export default function AvailabilityPage() {
  useEffect(() => {
     async function fetchMockOutlookEvents() {
       if (isConnected && address) {
-        // Fetch mock outlook events
         try {
-          const response = await fetch(`/api/calendar/events?creatorId=${address}`); // This API still uses mock-db
+          const response = await fetch(`/api/calendar/events?creatorId=${address}`);
           const data = await response.json();
           if (data.success && Array.isArray(data.events)) {
             const outlookEventsData = data.events
-              .filter((event: any) => event.title.toLowerCase().includes('outlook')) 
+              .filter((event: any) => event.title && event.title.toLowerCase().includes('outlook')) 
               .map((event: any) => ({
                 ...event,
                 start: new Date(event.start),
@@ -146,42 +166,45 @@ export default function AvailabilityPage() {
 
   useEffect(() => {
     const handleGoogleConnected = () => {
+      console.log("AvailabilityPage: googleCalendarConnected event received");
       setIsGoogleSignedIn(true);
-      // Small delay to ensure auth state is settled in the library
-      setTimeout(() => fetchGoogleCalendarEvents(), 100); 
+      setTimeout(() => fetchGoogleCalendarEvents(), 300); 
     };
     const handleGoogleDisconnected = () => {
+      console.log("AvailabilityPage: googleCalendarDisconnected event received");
       setIsGoogleSignedIn(false);
       setGoogleCalendarEvents([]);
     };
 
-    // Initial check based on localStorage (from CalendarConnect)
-    // This helps if the page loads and CalendarConnect has already established connection.
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && apiCalendar) {
         const initiallyConnected = localStorage.getItem(`google_calendar_connected_${address}`) === 'true';
         if (initiallyConnected) {
-            setIsGoogleSignedIn(true);
-            // Check if apiCalendar is ready before fetching
-            if (apiCalendar && apiCalendar.sign !== undefined) { // apiCalendar.sign is a boolean from the lib
-                 if(apiCalendar.sign) fetchGoogleCalendarEvents();
-            } else if (apiCalendar) {
-                 // If sign prop not yet available, wait for onload via listener
-                apiCalendar.onLoad(() => {
-                    if(apiCalendar.sign) fetchGoogleCalendarEvents();
-                });
+             console.log("AvailabilityPage: Google initially connected via localStorage.");
+             setIsGoogleSignedIn(true);
+             if (apiCalendar.sign !== undefined) {
+                 if(apiCalendar.sign) {
+                    console.log("AvailabilityPage: apiCalendar.sign is true, fetching events.");
+                    fetchGoogleCalendarEvents();
+                 } else {
+                    console.log("AvailabilityPage: apiCalendar.sign is false despite localStorage true. Resetting.");
+                    localStorage.removeItem(`google_calendar_connected_${address}`);
+                    setIsGoogleSignedIn(false);
+                 }
+            } else {
+                console.log("AvailabilityPage: apiCalendar.sign undefined, waiting for onLoad in CalendarConnect.");
+                 // CalendarConnect's useEffect will handle onLoad and potentially trigger fetchGoogleCalendarEvents
             }
         }
-
 
         window.addEventListener('googleCalendarConnected', handleGoogleConnected);
         window.addEventListener('googleCalendarDisconnected', handleGoogleDisconnected);
 
         return () => {
-        window.removeEventListener('googleCalendarConnected', handleGoogleConnected);
-        window.removeEventListener('googleCalendarDisconnected', handleGoogleDisconnected);
+          window.removeEventListener('googleCalendarConnected', handleGoogleConnected);
+          window.removeEventListener('googleCalendarDisconnected', handleGoogleDisconnected);
         };
     }
-  }, [fetchGoogleCalendarEvents, address]); // Added address to dependency array
+  }, [fetchGoogleCalendarEvents, address]);
 
   const handleWorkingHourChange = (day: string, field: keyof WorkingHour, value: string | boolean) => {
     setWorkingHours(prev => 
@@ -358,8 +381,8 @@ export default function AvailabilityPage() {
                       <p className="text-xs text-muted-foreground">
                         {event.start ? format(event.start, "MMM d, yyyy, h:mm a") : 'Date N/A'} - {event.end ? format(event.end, "h:mm a") : 'Time N/A'}
                       </p>
-                      {event.title.toLowerCase().includes('google') && <span className="text-xs text-blue-500"> (Google)</span>}
-                      {event.title.toLowerCase().includes('outlook') && <span className="text-xs text-blue-400"> (Outlook Mock)</span>}
+                      {event.title && event.title.toLowerCase().includes('google') && <span className="text-xs text-blue-500"> (Google)</span>}
+                      {event.title && event.title.toLowerCase().includes('outlook') && <span className="text-xs text-blue-400"> (Outlook Mock)</span>}
                     </li>
                   ))}
                 </ul>
@@ -367,7 +390,7 @@ export default function AvailabilityPage() {
                 <div className="text-center py-4">
                   <List className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
                    <p className="text-sm text-muted-foreground">
-                    {isGoogleSignedIn ? "No upcoming Google events found or unable to fetch." : "Connect your Google Calendar to see events."}
+                    {isGoogleSignedIn ? "No upcoming Google events found or unable to fetch." : (!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY ? "Google Calendar not configured by admin." : "Connect your Google Calendar to see events.")}
                   </p>
                    <p className="text-xs text-muted-foreground mt-1">Mock Outlook events are shown if Outlook is connected via dashboard.</p>
                 </div>
@@ -375,7 +398,7 @@ export default function AvailabilityPage() {
             </CardContent>
             <CardFooter>
                 <p className="text-xs text-muted-foreground">
-                    Google Calendar integration uses `react-google-calendar-api`. Ensure API key and Client ID are correctly configured.
+                    Google Calendar integration uses `react-google-calendar-api`. Ensure API key and Client ID are correctly configured in your environment.
                 </p>
             </CardFooter>
           </Card>
