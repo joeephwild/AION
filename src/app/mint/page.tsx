@@ -49,7 +49,7 @@ export default function MintTokenPage() {
   const [mintingStep, setMintingStep] = useState<string | null>(null);
   const [deployedCoinAddress, setDeployedCoinAddress] = useState<Address | null>(null);
   const [transactionHash, setTransactionHash] = useState<string | null>(null);
-  const { mutate: sendTransaction } = useSendTransaction();
+  const { mutate: sendTransaction, isPending: isTransactionPending } = useSendTransaction();
 
   const form = useForm<MintTokenFormValues>({
     resolver: zodResolver(mintTokenFormSchema),
@@ -61,7 +61,7 @@ export default function MintTokenPage() {
   });
 
   async function onSubmit(values: MintTokenFormValues) {
-    if (!address || !account) { // Ensure account is also available for chain and client
+    if (!address || !account) { 
       toast({
         title: "Wallet Not Connected",
         description: "Please connect your wallet to mint a token.",
@@ -70,6 +70,7 @@ export default function MintTokenPage() {
       return;
     }
 
+    console.log("Starting onSubmit process...");
     setIsMinting(true);
     setMintingStep("Preparing transaction...");
     setDeployedCoinAddress(null);
@@ -83,19 +84,32 @@ export default function MintTokenPage() {
         payoutRecipient: address,
         initialPurchaseWei: 0n, 
       };
+      console.log("Zora coin parameters:", coinParams);
 
       const contractCallTx = await createCoinCall(coinParams);
+      console.log('Value of contractCallTx after await createCoinCall:', contractCallTx);
+
+      if (!contractCallTx || !contractCallTx.to || !contractCallTx.data) {
+        console.error('contractCallTx is invalid:', contractCallTx);
+        toast({ title: "Minting Error", description: "Failed to prepare transaction data from Zora SDK.", variant: "destructive" });
+        setIsMinting(false);
+        setMintingStep(null);
+        return;
+      }
       
       setMintingStep("Please confirm in your wallet...");
+      console.log("Prepared Zora coin transaction. Ready to send:", contractCallTx);
+      console.log("Using Thirdweb client:", client, "and chain:", base);
       
       sendTransaction(
-        { // Pass client and chain with the transaction object
+        { 
           ...contractCallTx,
-          chain: base, // Use the imported base chain from thirdweb/chains
-          client: client, // Use the imported client from @/lib/thirdweb
+          chain: base, 
+          client: client, 
         },
         {
           onSuccess: async (result) => {
+            console.log("sendTransaction onSuccess callback hit. Result:", result);
             setTransactionHash(result.transactionHash);
             setMintingStep("Transaction sent. Waiting for confirmation...");
             toast({
@@ -104,11 +118,14 @@ export default function MintTokenPage() {
             });
 
             try {
+              console.log("Waiting for transaction receipt for hash:", result.transactionHash);
               const receipt = await publicClient.waitForTransactionReceipt({ hash: result.transactionHash as `0x${string}` });
+              console.log("Transaction receipt received:", receipt);
               setMintingStep("Transaction confirmed. Extracting coin address...");
               
               const coinDeployment = getCoinCreateFromLogs(receipt);
               if (coinDeployment?.coin) {
+                console.log("Coin deployed successfully. Address:", coinDeployment.coin);
                 setDeployedCoinAddress(coinDeployment.coin);
                 toast({
                   title: "Token Minted Successfully!",
@@ -125,7 +142,6 @@ export default function MintTokenPage() {
                 });
                 form.reset();
 
-                // Store in local storage for now (as per previous implementation)
                 const newCoin: Token = {
                   id: coinDeployment.coin,
                   name: values.name,
@@ -137,27 +153,30 @@ export default function MintTokenPage() {
                 const existingTokens: Token[] = existingTokensString ? JSON.parse(existingTokensString) : [];
                 localStorage.setItem(`userTokens_${address}`, JSON.stringify([...existingTokens, newCoin]));
 
-
               } else {
+                console.error("Could not extract coin address from logs. Receipt:", receipt);
                 throw new Error("Could not extract coin address from logs.");
               }
             } catch (receiptError) {
               console.error("Error processing transaction receipt:", receiptError);
               toast({
                 title: "Receipt Processing Failed",
-                description: receiptError instanceof Error ? receiptError.message : "Could not get coin address.",
+                description: receiptError instanceof Error ? receiptError.message : "Could not get coin address from receipt.",
                 variant: "destructive",
               });
             } finally {
-              setIsMinting(false);
-              setMintingStep(null);
+              // This finally block is for the inner try-catch (receipt processing)
+              // isMinting and mintingStep for the overall process are handled in sendTransaction's onSuccess/onError
+              // or the outer catch block.
             }
+            setIsMinting(false);
+            setMintingStep(null);
           },
           onError: (error) => {
-            console.error("Transaction error:", error);
+            console.error("sendTransaction onError callback hit. Error:", error);
             toast({
               title: "Transaction Failed",
-              description: error.message || "An unknown error occurred during the transaction.",
+              description: error.message || "An unknown error occurred during the transaction submission.",
               variant: "destructive",
             });
             setIsMinting(false);
@@ -165,16 +184,16 @@ export default function MintTokenPage() {
           },
         }
       );
+      console.log("Called sendTransaction. Wallet interaction should be initiated.");
 
     } catch (error) {
-      console.error("Error preparing Zora coin transaction:", error);
-      let errorMessage = "An unknown error occurred.";
+      console.error("Error in onSubmit (preparing Zora coin transaction or other synchronous error):", error);
+      let errorMessage = "An unknown error occurred while preparing to mint.";
       if (error instanceof Error) {
         errorMessage = error.message;
       }
-      // Check for specific "Metadata fetch failed" message
       if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string' && error.message.toLowerCase().includes('metadata fetch failed')) {
-        errorMessage = "Metadata fetch failed. Please ensure the URI is a valid, accessible URL pointing to your JSON metadata (e.g., ipfs://<CID> or https://.../metadata.json).";
+        errorMessage = "Metadata fetch failed. Ensure the URI is valid and accessible (e.g., ipfs://<CID> or https://.../metadata.json).";
       }
 
       toast({
@@ -203,6 +222,8 @@ export default function MintTokenPage() {
     );
   }
 
+  const currentSubmitButtonState = isMinting || isTransactionPending;
+
   return (
     <div className="flex justify-center py-8">
       <Card className="w-full max-w-2xl shadow-xl">
@@ -225,7 +246,7 @@ export default function MintTokenPage() {
                   <FormItem>
                     <FormLabel>Token Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., 1-Hour Design Consultation" {...field} />
+                      <Input placeholder="e.g., 1-Hour Design Consultation" {...field} disabled={currentSubmitButtonState}/>
                     </FormControl>
                     <FormDescription>The full name of your token.</FormDescription>
                     <FormMessage />
@@ -239,7 +260,7 @@ export default function MintTokenPage() {
                   <FormItem>
                     <FormLabel>Token Symbol</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., DESIGN60" {...field} />
+                      <Input placeholder="e.g., DESIGN60" {...field} disabled={currentSubmitButtonState}/>
                     </FormControl>
                     <FormDescription>A short ticker symbol (e.g., TKN). Uppercase letters and numbers only.</FormDescription>
                     <FormMessage />
@@ -253,7 +274,7 @@ export default function MintTokenPage() {
                   <FormItem>
                     <FormLabel>Metadata URI</FormLabel>
                     <FormControl>
-                      <Input placeholder="ipfs://<CID_of_metadata_json>" {...field} />
+                      <Input placeholder="ipfs://<CID_of_metadata_json>" {...field} disabled={currentSubmitButtonState}/>
                     </FormControl>
                     <FormDescription>
                       Provide a complete and valid link to your token's JSON metadata (e.g., `ipfs://YOUR_CID_HERE` or `https://example.com/metadata.json`).
@@ -273,12 +294,12 @@ export default function MintTokenPage() {
                 type="submit" 
                 size="lg" 
                 className="w-full shadow-md hover:shadow-primary/30" 
-                disabled={isMinting || !account}
+                disabled={currentSubmitButtonState || !account}
               >
-                {isMinting ? (
+                {currentSubmitButtonState ? (
                   <>
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    {mintingStep || "Minting Token..."}
+                    {isTransactionPending ? "Submitting to wallet..." : (mintingStep || "Processing...")}
                   </>
                 ) : (
                   <>
@@ -312,7 +333,7 @@ export default function MintTokenPage() {
                     </Button>
                  </p>
               )}
-              {isMinting && mintingStep && <p className="text-sm text-primary mt-2">{mintingStep}...</p>}
+              {(isMinting || isTransactionPending) && mintingStep && <p className="text-sm text-primary mt-2">{mintingStep}...</p>}
             </div>
           )}
         </CardContent>
