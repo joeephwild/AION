@@ -12,11 +12,11 @@ import { useToast } from "@/hooks/use-toast";
 import { Zap, AlertTriangle, Loader2, CheckCircle, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
-import { baseSepolia } from "thirdweb/chains"; 
+import { baseSepolia } from "thirdweb/chains";
 import { createCoinCall, getCoinCreateFromLogs } from "@zoralabs/coins-sdk";
 import { type Address, createPublicClient, http } from "viem";
 import Link from "next/link";
-import type { Token } from "@/types"; 
+import type { Token } from "@/types";
 import { client } from "@/lib/thirdweb";
 
 
@@ -37,8 +37,8 @@ type MintTokenFormValues = z.infer<typeof mintTokenFormSchema>;
 
 // Create a Viem public client for Base Sepolia chain to fetch transaction receipts
 const publicClient = createPublicClient({
-  chain: baseSepolia, 
-  transport: http('https://sepolia.base.org'), 
+  chain: baseSepolia,
+  transport: http('https://sepolia.base.org'),
 });
 
 export default function MintTokenPage() {
@@ -56,12 +56,12 @@ export default function MintTokenPage() {
     defaultValues: {
       name: "",
       symbol: "",
-      uri: "ipfs://bafybeigoxzqzbnxsn35vq7lls3ljxdcwjafxvbvkivprsodzrptpiguysy", 
+      uri: "ipfs://bafybeigoxzqzbnxsn35vq7lls3ljxdcwjafxvbvkivprsodzrptpiguysy",
     },
   });
 
   async function onSubmit(values: MintTokenFormValues) {
-    if (!address || !account) { 
+    if (!address || !account) {
       toast({
         title: "Wallet Not Connected",
         description: "Please connect your wallet to mint a token.",
@@ -82,44 +82,53 @@ export default function MintTokenPage() {
         symbol: values.symbol,
         uri: values.uri,
         payoutRecipient: address,
-        initialPurchaseWei: 0n, 
+        initialPurchaseWei: 0n,
       };
       console.log("Zora coin parameters for createCoinCall:", coinParams);
 
+      // createCoinCall is expected to return an object that useSendTransaction can use directly.
+      // This object typically includes { address (contract), abi, functionName, args, value }
       const contractCallTx = await createCoinCall(coinParams);
-      console.log('Value of contractCallTx after await createCoinCall:', contractCallTx);
+      console.log('Value of contractCallTx after await createCoinCall:', contractCallTx ? JSON.stringify(contractCallTx, (key, value) => typeof value === 'bigint' ? value.toString() : value, 2) : contractCallTx);
 
+
+      // Validate the structure of contractCallTx based on Zora SDK's expected output for contract calls
+      // It should have `address` (contract to call), `args` (function arguments), and `value`.
+      // `abi` and `functionName` are also part of this structure and used by `useSendTransaction`.
       if (
-        !contractCallTx || 
-        typeof contractCallTx.to !== 'string' || 
-        typeof contractCallTx.data !== 'string' || 
-        typeof contractCallTx.value === 'undefined' // value can be 0n, so check specifically for undefined
+        !contractCallTx ||
+        typeof contractCallTx.address !== 'string' || // This is the contract address, effectively 'to'
+        !Array.isArray(contractCallTx.args) ||       // These are the function arguments for encoding 'data'
+        typeof contractCallTx.value === 'undefined'   // Transaction value (can be 0n, so check for undefined if mandatory)
+                                                      // `abi` and `functionName` are also critical for this type of tx object
       ) {
         console.error(
-          'Zora SDK `createCoinCall` returned an invalid transaction object. Expected {to: string, data: string, value: bigint}, got:',
-          JSON.stringify(contractCallTx, (key, value) =>
-            typeof value === 'bigint' ? value.toString() : value, 2)
+          'Zora SDK `createCoinCall` returned an invalid transaction object. Expected properties `address`, `args`, `value` (and typically `abi`, `functionName`). Got:',
+          JSON.stringify(contractCallTx, (key, val) =>
+            typeof val === 'bigint' ? val.toString() : val, 2)
         );
-        toast({ 
-          title: "Minting Error", 
-          description: "Failed to prepare transaction: The Zora SDK returned incomplete data. This might be due to an issue with the metadata URI or its content. Please check the console for details.", 
+        toast({
+          title: "Minting Error",
+          description: "Failed to prepare transaction: The Zora SDK returned incomplete or malformed data. This might be due to an issue with the metadata URI or its content. Please check the console for details.",
           variant: "destructive",
-          duration: 8000, 
+          duration: 8000,
         });
         setIsMinting(false);
         setMintingStep(null);
         return;
       }
-      
+
       setMintingStep("Please confirm in your wallet...");
-      console.log("Prepared Zora coin transaction. Ready to send to Base Sepolia:", contractCallTx);
+      console.log("Prepared Zora coin transaction for Base Sepolia. Ready to send:", contractCallTx);
       console.log("Using Thirdweb client:", client, "and chain:", baseSepolia);
-      
+
       sendTransaction(
-        { 
+        {
+          // Pass contractCallTx directly. Thirdweb's useSendTransaction
+          // can handle objects with { address, abi, functionName, args, value }.
           ...contractCallTx,
-          chain: baseSepolia, 
-          client: client, 
+          chain: baseSepolia,
+          client: client,
         },
         {
           onSuccess: async (result) => {
@@ -136,7 +145,7 @@ export default function MintTokenPage() {
               const receipt = await publicClient.waitForTransactionReceipt({ hash: result.transactionHash as `0x${string}` });
               console.log("Transaction receipt received:", receipt);
               setMintingStep("Transaction confirmed. Extracting coin address...");
-              
+
               const coinDeployment = getCoinCreateFromLogs(receipt);
               if (coinDeployment?.coin) {
                 console.log("Coin deployed successfully on Base Sepolia. Address:", coinDeployment.coin);
@@ -179,7 +188,7 @@ export default function MintTokenPage() {
                 variant: "destructive",
               });
             } finally {
-              setIsMinting(false); 
+              setIsMinting(false);
               setMintingStep(null);
             }
           },
@@ -202,9 +211,12 @@ export default function MintTokenPage() {
       let errorMessage = "An unknown error occurred while preparing to mint.";
       if (error instanceof Error) {
         errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string') {
+        errorMessage = error.message;
       }
-      if (typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string' && error.message.toLowerCase().includes('metadata fetch failed')) {
-        errorMessage = "Metadata fetch failed. Ensure the URI is valid and accessible (e.g., ipfs://<CID> or https://.../metadata.json).";
+      
+      if (errorMessage.toLowerCase().includes('metadata fetch failed')) {
+        errorMessage = "Metadata fetch failed. Ensure the URI is valid and accessible (e.g., ipfs://<CID> or https://.../metadata.json). Check network or CORS issues if using https.";
       }
 
       toast({
@@ -217,7 +229,7 @@ export default function MintTokenPage() {
     }
   }
 
-  if (!address) { 
+  if (!address) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <Card className="w-full max-w-md p-8 shadow-xl">
@@ -300,11 +312,11 @@ export default function MintTokenPage() {
                   </FormItem>
                 )}
               />
-              
-              <Button 
-                type="submit" 
-                size="lg" 
-                className="w-full shadow-md hover:shadow-primary/30" 
+
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full shadow-md hover:shadow-primary/30"
                 disabled={currentSubmitButtonState || !account}
               >
                 {currentSubmitButtonState ? (
@@ -352,4 +364,3 @@ export default function MintTokenPage() {
     </div>
   );
 }
-
