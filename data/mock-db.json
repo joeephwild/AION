@@ -1,11 +1,3 @@
 {
-  "users": {
-    "0x14dF3d3f766343A6C681737c0434ec1A74A8156C": {
-      "calendarConnections": {
-        "google": true,
-        "outlook": false
-      }
-    }
-  },
   "bookings": []
 }

@@ -2,43 +2,50 @@
 // /src/app/api/calendar/connect/[service]/route.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
-const dbPath = path.join(process.cwd(), 'data', 'mock-db.json');
-
-type UserData = {
-  availabilitySettings?: any; // Replace with actual type if defined
-  calendarConnections?: {
-    google?: boolean;
-    outlook?: boolean;
-  };
-  // other user properties
+type CalendarConnections = {
+  google?: boolean;
+  outlook?: boolean;
 };
 
-type DbData = {
-  users: Record<string, UserData>;
-  bookings: any[]; // Replace with actual type if defined
-};
+// GET /api/calendar/connect/status
+// Note: The [service] param is not used here, this endpoint is for overall status
+export async function GET(
+  request: NextRequest
+) {
+  const userId = request.headers.get('x-user-id');
 
+  if (!userId) {
+    return NextResponse.json({ success: false, message: 'x-user-id header is required' }, { status: 400 });
+  }
 
-async function readDb(): Promise<DbData> {
   try {
-    const data = await fs.readFile(dbPath, 'utf-8');
-    const parsedData = JSON.parse(data);
-    // Ensure users object exists
-    if (!parsedData.users) {
-      parsedData.users = {};
+    const userDocRef = doc(db, 'users', userId);
+    const userDocSnap = await getDoc(userDocRef);
+
+    let connections: CalendarConnections = { google: false, outlook: false }; // Default
+
+    if (userDocSnap.exists()) {
+      const userData = userDocSnap.data();
+      if (userData.calendarConnections) {
+        connections = userData.calendarConnections;
+      }
     }
-    return parsedData;
+    
+    return NextResponse.json({
+      success: true,
+      connections,
+    });
+
   } catch (error) {
-    return { users: {}, bookings: [] };
+    console.error('Failed to fetch calendar connection status from Firestore:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    return NextResponse.json({ success: false, message: 'Failed to fetch connection status', error: errorMessage }, { status: 500 });
   }
 }
 
-async function writeDb(data: DbData): Promise<void> {
-  await fs.writeFile(dbPath, JSON.stringify(data, null, 2), 'utf-8');
-}
 
 export async function POST(
   request: NextRequest,
@@ -55,59 +62,33 @@ export async function POST(
   }
 
   try {
-    const { connect } = await request.json(); // Expecting a 'connect: true/false' in body
-    const db = await readDb();
-
-    if (!db.users[userId]) {
-      db.users[userId] = {};
-    }
-    if (!db.users[userId].calendarConnections) {
-      db.users[userId].calendarConnections = { google: false, outlook: false };
+    const { connect } = await request.json(); // Expecting 'connect: true/false'
+    
+    if (typeof connect !== 'boolean') {
+      return NextResponse.json({ success: false, message: 'Invalid payload: connect must be a boolean.' }, { status: 400 });
     }
 
-    if (service === 'google') {
-      db.users[userId].calendarConnections!.google = connect;
-    } else if (service === 'outlook') {
-      db.users[userId].calendarConnections!.outlook = connect;
-    }
+    const userDocRef = doc(db, 'users', userId);
 
-    await writeDb(db);
+    // Prepare the update object using dot notation for nested fields
+    const updateData: Record<string, any> = {};
+    updateData[`calendarConnections.${service}`] = connect;
 
+    // Use setDoc with merge: true to ensure the document and calendarConnections field are created if they don't exist
+    // Then updateDoc can be used if you are sure calendarConnections object exists.
+    // For simplicity and robustness against missing fields/docs, setDoc with merge is often easier.
+    await setDoc(userDocRef, { calendarConnections: { [service]: connect } }, { merge: true });
+    
     return NextResponse.json({
       success: true,
-      message: `Mock connection to ${service} ${connect ? 'established' : 'disconnected'}. Status updated.`,
+      message: `Connection to ${service} ${connect ? 'established' : 'disconnected'}. Status updated in Firestore.`,
       service: service,
       connected: connect,
     });
 
   } catch (error) {
-    console.error(`Failed to update ${service} connection status:`, error);
-    return NextResponse.json({ success: false, message: 'Failed to update connection status' }, { status: 500 });
-  }
-}
-
-// GET method to fetch current connection status
-export async function GET(
-  request: NextRequest
-) {
-  const userId = request.headers.get('x-user-id');
-
-  if (!userId) {
-    return NextResponse.json({ success: false, message: 'x-user-id header is required' }, { status: 400 });
-  }
-
-  try {
-    const db = await readDb();
-    const user = db.users[userId];
-    const connections = user?.calendarConnections || { google: false, outlook: false };
-    
-    return NextResponse.json({
-      success: true,
-      connections,
-    });
-
-  } catch (error) {
-    console.error('Failed to fetch calendar connection status:', error);
-    return NextResponse.json({ success: false, message: 'Failed to fetch connection status' }, { status: 500 });
+    console.error(`Failed to update ${service} connection status in Firestore:`, error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    return NextResponse.json({ success: false, message: 'Failed to update connection status', error: errorMessage }, { status: 500 });
   }
 }
