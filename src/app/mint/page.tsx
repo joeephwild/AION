@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Zap, AlertTriangle, Loader2, CheckCircle, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
-import { baseSepolia } from "thirdweb/chains"; // Changed from base to baseSepolia
+import { baseSepolia } from "thirdweb/chains"; 
 import { createCoinCall, getCoinCreateFromLogs } from "@zoralabs/coins-sdk";
 import { type Address, createPublicClient, http } from "viem";
 import Link from "next/link";
@@ -37,8 +37,8 @@ type MintTokenFormValues = z.infer<typeof mintTokenFormSchema>;
 
 // Create a Viem public client for Base Sepolia chain to fetch transaction receipts
 const publicClient = createPublicClient({
-  chain: baseSepolia, // Changed from base to baseSepolia
-  transport: http('https://sepolia.base.org'), // Changed RPC to Base Sepolia
+  chain: baseSepolia, 
+  transport: http('https://sepolia.base.org'), 
 });
 
 export default function MintTokenPage() {
@@ -84,14 +84,27 @@ export default function MintTokenPage() {
         payoutRecipient: address,
         initialPurchaseWei: 0n, 
       };
-      console.log("Zora coin parameters:", coinParams);
+      console.log("Zora coin parameters for createCoinCall:", coinParams);
 
       const contractCallTx = await createCoinCall(coinParams);
       console.log('Value of contractCallTx after await createCoinCall:', contractCallTx);
 
-      if (!contractCallTx || !contractCallTx.to || !contractCallTx.data) {
-        console.error('contractCallTx is invalid:', contractCallTx);
-        toast({ title: "Minting Error", description: "Failed to prepare transaction data from Zora SDK.", variant: "destructive" });
+      if (
+        !contractCallTx || 
+        typeof contractCallTx.to !== 'string' || 
+        typeof contractCallTx.data !== 'string' || 
+        typeof contractCallTx.value === 'undefined' // value can be 0n, so check specifically for undefined
+      ) {
+        console.error(
+          'Zora SDK `createCoinCall` returned an invalid transaction object. Expected {to: string, data: string, value: bigint}, got:',
+          JSON.stringify(contractCallTx, null, 2)
+        );
+        toast({ 
+          title: "Minting Error", 
+          description: "Failed to prepare transaction: The Zora SDK returned incomplete data. This might be due to an issue with the metadata URI or its content. Please check the console for details.", 
+          variant: "destructive",
+          duration: 8000, 
+        });
         setIsMinting(false);
         setMintingStep(null);
         return;
@@ -104,7 +117,7 @@ export default function MintTokenPage() {
       sendTransaction(
         { 
           ...contractCallTx,
-          chain: baseSepolia, // Changed from base to baseSepolia
+          chain: baseSepolia, 
           client: client, 
         },
         {
@@ -338,3 +351,4 @@ export default function MintTokenPage() {
     </div>
   );
 }
+
