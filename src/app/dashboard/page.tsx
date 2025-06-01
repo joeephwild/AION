@@ -13,7 +13,7 @@ import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { useToast } from "@/hooks/use-toast";
 import { getCoin } from "@zoralabs/coins-sdk";
-import { base } from "thirdweb/chains";
+import { baseSepolia } from "thirdweb/chains"; // Changed from base to baseSepolia
 
 export default function DashboardPage() {
   const account = useActiveAccount();
@@ -42,7 +42,8 @@ export default function DashboardPage() {
           const fetchedTokens: Token[] = [];
           for (const basicTokenInfo of storedCoinAddresses) {
             try {
-              const response = await getCoin({ address: basicTokenInfo.id, chain: base.id });
+              // Fetch details from Base Sepolia
+              const response = await getCoin({ address: basicTokenInfo.id, chain: baseSepolia.id }); 
               const coinData = response.data?.zora20Token;
               if (coinData) {
                 fetchedTokens.push({
@@ -59,7 +60,7 @@ export default function DashboardPage() {
                 fetchedTokens.push(basicTokenInfo as Token);
               }
             } catch (error) {
-              console.warn(`Failed to fetch details for coin ${basicTokenInfo.id}:`, error);
+              console.warn(`Failed to fetch details for coin ${basicTokenInfo.id} on Base Sepolia:`, error);
               fetchedTokens.push(basicTokenInfo as Token); // Add basic info if detailed fetch fails
             }
           }
@@ -71,7 +72,7 @@ export default function DashboardPage() {
           setIsLoadingTokens(false);
         }
         
-        // Fetch bookings
+        // Fetch bookings (still from mock for now)
         try {
           const bookingsResponse = await fetch(`/api/bookings?creatorId=${address}`);
           const bookingsData = await bookingsResponse.json();
@@ -128,7 +129,7 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Creator Dashboard</h1>
-          <p className="text-muted-foreground">Manage your Zora time tokens, calendar, and bookings.</p>
+          <p className="text-muted-foreground">Manage your Zora time tokens (Base Sepolia), calendar, and bookings.</p>
         </div>
         <Button asChild size="lg" className="shadow-md hover:shadow-primary/30">
           <Link href="/mint">
@@ -142,8 +143,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 shadow-lg">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Zap className="h-6 w-6 text-primary" /> My Zora Time Tokens</CardTitle>
-            <CardDescription>View and manage your minted Zora time tokens. (Data from local storage & Zora SDK)</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Zap className="h-6 w-6 text-primary" /> My Zora Time Tokens (Base Sepolia)</CardTitle>
+            <CardDescription>View and manage your minted Zora time tokens. (Data from local storage & Zora SDK on Base Sepolia)</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingTokens ? (
@@ -177,8 +178,8 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div className="flex gap-2 mt-2 sm:mt-0">
-                        <Button variant="outline" size="icon" aria-label="View Token on Basescan" asChild>
-                           <Link href={`https://basescan.org/address/${token.id}`} target="_blank">
+                        <Button variant="outline" size="icon" aria-label="View Token on Sepolia Basescan" asChild>
+                           <Link href={`https://sepolia.basescan.org/address/${token.id}`} target="_blank">
                              <Eye className="h-4 w-4 text-accent" />
                            </Link>
                         </Button>
@@ -190,7 +191,7 @@ export default function DashboardPage() {
             ) : (
               <div className="text-center py-8">
                 <Image src="https://placehold.co/300x200.png" data-ai-hint="empty state tokens" alt="No tokens" width={300} height={200} className="mx-auto mb-4 rounded-md opacity-50" />
-                <p className="text-muted-foreground">You haven't minted any Zora tokens yet, or none were found in local storage.</p>
+                <p className="text-muted-foreground">You haven't minted any Zora tokens on Base Sepolia yet, or none were found in local storage.</p>
                 <Button variant="link" asChild className="text-primary hover:text-accent">
                   <Link href="/mint">Mint your first token</Link>
                 </Button>
@@ -238,7 +239,8 @@ export default function DashboardPage() {
                       <p className="text-sm text-muted-foreground">
                         {booking.startTime.toLocaleString()} - {booking.endTime.toLocaleTimeString()}
                       </p>
-                      <p className="text-sm text-muted-foreground">Token ID: <Link href={`https://basescan.org/token/${booking.tokenId}`} target="_blank" className="text-accent hover:underline">{`${booking.tokenId.slice(0,10)}...`}</Link></p>
+                      {/* Link to token on Sepolia Basescan. Ensure tokenId is an address. */}
+                      <p className="text-sm text-muted-foreground">Token ID: <Link href={`https://sepolia.basescan.org/token/${booking.tokenId}`} target="_blank" className="text-accent hover:underline">{`${booking.tokenId.slice(0,10)}...`}</Link></p>
                     </div>
                     <div className="mt-2 sm:mt-0">
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${

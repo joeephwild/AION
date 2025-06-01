@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Zap, AlertTriangle, Loader2, CheckCircle, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { useActiveAccount, useSendTransaction } from "thirdweb/react";
-import { base } from "thirdweb/chains";
+import { baseSepolia } from "thirdweb/chains"; // Changed from base to baseSepolia
 import { createCoinCall, getCoinCreateFromLogs } from "@zoralabs/coins-sdk";
 import { type Address, createPublicClient, http } from "viem";
 import Link from "next/link";
@@ -35,10 +35,10 @@ const mintTokenFormSchema = z.object({
 
 type MintTokenFormValues = z.infer<typeof mintTokenFormSchema>;
 
-// Create a Viem public client for Base chain to fetch transaction receipts
+// Create a Viem public client for Base Sepolia chain to fetch transaction receipts
 const publicClient = createPublicClient({
-  chain: base,
-  transport: http('https://mainnet.base.org'), 
+  chain: baseSepolia, // Changed from base to baseSepolia
+  transport: http('https://sepolia.base.org'), // Changed RPC to Base Sepolia
 });
 
 export default function MintTokenPage() {
@@ -56,7 +56,7 @@ export default function MintTokenPage() {
     defaultValues: {
       name: "",
       symbol: "",
-      uri: "ipfs://bafybeigoxzqzbnxsn35vq7lls3ljxdcwjafxvbvkivprsodzrptpiguysy", // Updated placeholder
+      uri: "ipfs://bafybeigoxzqzbnxsn35vq7lls3ljxdcwjafxvbvkivprsodzrptpiguysy", 
     },
   });
 
@@ -70,7 +70,7 @@ export default function MintTokenPage() {
       return;
     }
 
-    console.log("Starting onSubmit process...");
+    console.log("Starting onSubmit process for Base Sepolia...");
     setIsMinting(true);
     setMintingStep("Preparing transaction...");
     setDeployedCoinAddress(null);
@@ -98,44 +98,44 @@ export default function MintTokenPage() {
       }
       
       setMintingStep("Please confirm in your wallet...");
-      console.log("Prepared Zora coin transaction. Ready to send:", contractCallTx);
-      console.log("Using Thirdweb client:", client, "and chain:", base);
+      console.log("Prepared Zora coin transaction. Ready to send to Base Sepolia:", contractCallTx);
+      console.log("Using Thirdweb client:", client, "and chain:", baseSepolia);
       
       sendTransaction(
         { 
           ...contractCallTx,
-          chain: base, 
+          chain: baseSepolia, // Changed from base to baseSepolia
           client: client, 
         },
         {
           onSuccess: async (result) => {
             console.log("sendTransaction onSuccess callback hit. Result:", result);
             setTransactionHash(result.transactionHash);
-            setMintingStep("Transaction sent. Waiting for confirmation...");
+            setMintingStep("Transaction sent. Waiting for confirmation on Base Sepolia...");
             toast({
               title: "Transaction Submitted",
               description: `Hash: ${result.transactionHash.slice(0,10)}...`,
             });
 
             try {
-              console.log("Waiting for transaction receipt for hash:", result.transactionHash);
+              console.log("Waiting for transaction receipt for hash on Base Sepolia:", result.transactionHash);
               const receipt = await publicClient.waitForTransactionReceipt({ hash: result.transactionHash as `0x${string}` });
               console.log("Transaction receipt received:", receipt);
               setMintingStep("Transaction confirmed. Extracting coin address...");
               
               const coinDeployment = getCoinCreateFromLogs(receipt);
               if (coinDeployment?.coin) {
-                console.log("Coin deployed successfully. Address:", coinDeployment.coin);
+                console.log("Coin deployed successfully on Base Sepolia. Address:", coinDeployment.coin);
                 setDeployedCoinAddress(coinDeployment.coin);
                 toast({
-                  title: "Token Minted Successfully!",
+                  title: "Token Minted Successfully on Base Sepolia!",
                   description: `Coin Address: ${coinDeployment.coin}`,
                   variant: "default",
                   duration: 8000,
                   action: (
                     <Button variant="link" size="sm" asChild>
-                      <Link href={`https://basescan.org/address/${coinDeployment.coin}`} target="_blank">
-                        View on Basescan <ExternalLink className="h-4 w-4 ml-1" />
+                      <Link href={`https://sepolia.basescan.org/address/${coinDeployment.coin}`} target="_blank">
+                        View on Sepolia Basescan <ExternalLink className="h-4 w-4 ml-1" />
                       </Link>
                     </Button>
                   )
@@ -165,12 +165,9 @@ export default function MintTokenPage() {
                 variant: "destructive",
               });
             } finally {
-              // This finally block is for the inner try-catch (receipt processing)
-              // isMinting and mintingStep for the overall process are handled in sendTransaction's onSuccess/onError
-              // or the outer catch block.
+              setIsMinting(false); 
+              setMintingStep(null);
             }
-            setIsMinting(false);
-            setMintingStep(null);
           },
           onError: (error) => {
             console.error("sendTransaction onError callback hit. Error:", error);
@@ -184,7 +181,7 @@ export default function MintTokenPage() {
           },
         }
       );
-      console.log("Called sendTransaction. Wallet interaction should be initiated.");
+      console.log("Called sendTransaction. Wallet interaction should be initiated for Base Sepolia.");
 
     } catch (error) {
       console.error("Error in onSubmit (preparing Zora coin transaction or other synchronous error):", error);
@@ -212,7 +209,7 @@ export default function MintTokenPage() {
         <Card className="w-full max-w-md p-8 shadow-xl">
            <Zap className="h-12 w-12 text-primary mx-auto mb-4" />
           <h2 className="text-2xl font-semibold mb-2">Mint Your Time Token</h2>
-          <p className="text-muted-foreground mb-6">Connect your wallet to create and launch your unique access tokens on Zora.</p>
+          <p className="text-muted-foreground mb-6">Connect your wallet to create and launch your unique access tokens on Zora (Base Sepolia Testnet).</p>
            <div className="flex items-center justify-center p-4 mt-4 bg-destructive/10 text-destructive rounded-md">
             <AlertTriangle className="h-5 w-5 mr-2" />
             Please connect your wallet to proceed.
@@ -230,10 +227,10 @@ export default function MintTokenPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-2xl">
             <Zap className="h-7 w-7 text-primary" />
-            Mint New Zora Time Token
+            Mint New Zora Time Token (Base Sepolia)
           </CardTitle>
           <CardDescription>
-            Create your unique ERC-20 token on Zora (Base network) to represent access to your time or services.
+            Create your unique ERC-20 token on Zora (Base Sepolia testnet) to represent access to your time or services.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -303,7 +300,7 @@ export default function MintTokenPage() {
                   </>
                 ) : (
                   <>
-                    <Zap className="mr-2 h-5 w-5" /> Mint Zora Coin
+                    <Zap className="mr-2 h-5 w-5" /> Mint Zora Coin (Base Sepolia)
                   </>
                 )}
               </Button>
@@ -318,7 +315,7 @@ export default function MintTokenPage() {
               <p className="text-sm text-muted-foreground">
                 Hash: <code className="text-xs break-all">{transactionHash}</code>
                  <Button variant="link" size="sm" asChild className="ml-1 p-0 h-auto">
-                    <Link href={`https://basescan.org/tx/${transactionHash}`} target="_blank">
+                    <Link href={`https://sepolia.basescan.org/tx/${transactionHash}`} target="_blank">
                        <ExternalLink className="h-3 w-3" />
                     </Link>
                  </Button>
@@ -327,7 +324,7 @@ export default function MintTokenPage() {
                  <p className="text-sm text-muted-foreground mt-1">
                     Deployed Coin Address: <code className="text-xs break-all">{deployedCoinAddress}</code>
                      <Button variant="link" size="sm" asChild className="ml-1 p-0 h-auto">
-                        <Link href={`https://basescan.org/address/${deployedCoinAddress}`} target="_blank">
+                        <Link href={`https://sepolia.basescan.org/address/${deployedCoinAddress}`} target="_blank">
                            <ExternalLink className="h-3 w-3" />
                         </Link>
                     </Button>
@@ -341,4 +338,3 @@ export default function MintTokenPage() {
     </div>
   );
 }
-
