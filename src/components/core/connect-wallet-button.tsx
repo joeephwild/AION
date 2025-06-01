@@ -1,9 +1,8 @@
-
 'use client';
 
 import { ConnectButton } from "thirdweb/react";
 import { client } from "@/lib/thirdweb";
-import { base } from "thirdweb/chains";
+import { baseSepolia } from "thirdweb/chains"; // Changed from base to baseSepolia
 import { siteConfig } from "@/config/site";
 
 // Define custom theme properties for the ConnectButton based on globals.css
@@ -40,8 +39,8 @@ export function ConnectWalletButton() {
   return (
     <ConnectButton
       client={client}
-      chain={base} // Default to Base chain for connection prompt
-      supportedChains={[base]} // Ensure Base is listed as supported
+      chain={baseSepolia} // Default to Base Sepolia chain for connection prompt
+      supportedChains={[baseSepolia]} // Ensure Base Sepolia is listed as supported
       appMetadata={{
         name: siteConfig.name,
         url: siteConfig.url,
@@ -52,7 +51,7 @@ export function ConnectWalletButton() {
       connectModal={{
         size: "compact", // "compact" or "wide"
         title: `Connect to ${siteConfig.name}`,
-        titleIconUrl: `${siteConfig.url}/icon.png`,
+        // titleIconUrl: `${siteConfig.url}/icon.png`,
         welcomeScreen: {
           title: `Welcome to ${siteConfig.name}`,
           subtitle: siteConfig.description,
@@ -60,10 +59,10 @@ export function ConnectWalletButton() {
         },
       }}
       detailsButton={{
-        // displayBalanceToken: { [base.id]: "0x..." }, // Optional: Display balance of a specific token on Base
-        // chains: [base] // Show details only for Base
+        // displayBalanceToken: { [baseSepolia.id]: "0x..." }, // Optional: Display balance of a specific token on Base Sepolia
+        // chains: [baseSepolia] // Show details only for Base Sepolia
       }}
-      
+
     />
   );
 }
