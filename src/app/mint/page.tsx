@@ -97,7 +97,8 @@ export default function MintTokenPage() {
       ) {
         console.error(
           'Zora SDK `createCoinCall` returned an invalid transaction object. Expected {to: string, data: string, value: bigint}, got:',
-          JSON.stringify(contractCallTx, null, 2)
+          JSON.stringify(contractCallTx, (key, value) =>
+            typeof value === 'bigint' ? value.toString() : value, 2)
         );
         toast({ 
           title: "Minting Error", 
