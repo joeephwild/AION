@@ -9,18 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import { useState, useEffect } from "react";
-import type { Creator, CalendarEvent, Booking } from "@/types";
+import type { Creator, CalendarEvent, CreatorPublicProfile, Token } from "@/types";
 import { useActiveAccount } from "thirdweb/react";
-
-// Mock creator data
-const mockCreator: Creator = {
-  id: 'alex-chen-web3', // Using the slug as mock ID for simplicity here
-  name: 'Alex Chen',
-  bio: 'Experienced Web3 consultant and smart contract developer. Book a session to discuss your project.',
-  avatarUrl: 'https://placehold.co/128x128.png',
-  tokens: [{ id: '0xTokenContractPlaceholder', name: '1-Hour Consultation Token', symbol: 'ACT', creatorId: 'alex-chen-web3', totalSupply: 100n }],
-  calendarIntegrations: { google: true, outlook: false },
-};
 
 // Mock availability - This would be fetched from the creator's actual calendar in a real app
 const mockAvailability: CalendarEvent[] = [
@@ -28,6 +18,16 @@ const mockAvailability: CalendarEvent[] = [
   { title: 'Available Slot', start: new Date(new Date().setDate(new Date().getDate() + 2) + 11 * 3600000), end: new Date(new Date().setDate(new Date().getDate() + 2) + 12 * 3600000) },
   { title: 'Available Slot', start: new Date(new Date().setDate(new Date().getDate() + 3) + 14 * 3600000), end: new Date(new Date().setDate(new Date().getDate() + 3) + 15 * 3600000) },
 ];
+
+// Mock token data, this should ideally be fetched on-chain if possible,
+// or managed via creator's dashboard and stored in their profile.
+// For now, we'll associate it based on creatorId if profile is fetched.
+const getMockTokensForCreator = (creatorId: string): Token[] => {
+  if (creatorId) { // Check if creatorId is truthy
+    return [{ id: `0xMockTokenFor_${creatorId.slice(0,10)}`, name: '1-Hour Consultation Token', symbol: 'ACT', creatorId: creatorId, totalSupply: 100n }];
+  }
+  return [];
+};
 
 
 export default function BookingPage() {
@@ -46,22 +46,43 @@ export default function BookingPage() {
   const [creator, setCreator] = useState<Creator | null>(null);
 
   useEffect(() => {
-    setIsLoadingCreator(true);
-    // Simulate fetching creator data
-    setTimeout(() => {
-      if (creatorIdParam === 'alex-chen-web3') { 
-        setCreator(mockCreator);
-      } else {
+    async function fetchCreatorProfile() {
+      if (!creatorIdParam) {
+        setIsLoadingCreator(false);
         setCreator(null);
+        return;
       }
-      setIsLoadingCreator(false);
-    }, 1000);
-  }, [creatorIdParam]);
+      setIsLoadingCreator(true);
+      try {
+        const response = await fetch(`/api/creators/${creatorIdParam}`);
+        const data = await response.json();
+        if (data.success && data.profile) {
+          const fetchedProfile = data.profile as CreatorPublicProfile;
+          // Combine fetched profile with mock tokens for now
+          setCreator({
+            ...fetchedProfile,
+            tokens: getMockTokensForCreator(fetchedProfile.id),
+          });
+        } else {
+          setCreator(null);
+          toast({ title: "Creator Not Found", description: data.message || "Could not load creator profile.", variant: "destructive" });
+        }
+      } catch (error) {
+        console.error("Failed to fetch creator profile:", error);
+        setCreator(null);
+        toast({ title: "Error", description: "Could not load creator profile.", variant: "destructive" });
+      } finally {
+        setIsLoadingCreator(false);
+      }
+    }
+    fetchCreatorProfile();
+  }, [creatorIdParam, toast]);
 
   useEffect(() => {
-    if (isConnected && address && creator) {
+    if (isConnected && address && creator && creator.tokens.length > 0) {
       // Mock token check: In a real app, query the blockchain for token balance
-      setHasRequiredToken(true); // Assume user has token for mock purposes
+      // For now, assume user has the first token if it exists for the creator
+      setHasRequiredToken(true); 
     } else {
       setHasRequiredToken(false);
     }
@@ -98,7 +119,7 @@ export default function BookingPage() {
         },
         body: JSON.stringify({
           creatorId: creator.id,
-          tokenId: creator.tokens[0].id,
+          tokenId: creator.tokens[0].id, // Use the first token for now
           startTime: slot.start.toISOString(),
           endTime: slot.end.toISOString(),
         }),
@@ -142,7 +163,7 @@ export default function BookingPage() {
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <h2 className="text-2xl font-semibold mb-2">Creator Not Found</h2>
-        <p className="text-muted-foreground">The creator you are looking for does not exist or is unavailable.</p>
+        <p className="text-muted-foreground">The creator profile for "{creatorIdParam}" could not be loaded or does not exist.</p>
       </div>
     );
   }
@@ -159,7 +180,7 @@ export default function BookingPage() {
               <AvatarFallback>{creator.name ? creator.name.charAt(0).toUpperCase() : 'C'}</AvatarFallback>
             </Avatar>
             <CardTitle className="text-2xl">{creator.name || 'Aion Creator'}</CardTitle>
-            <CardDescription className="text-sm">{`${creator.id.slice(0,6)}...${creator.id.slice(-4)}`}</CardDescription>
+             <CardDescription className="text-sm">{creator.id ? `${creator.id.slice(0,6)}...${creator.id.slice(-4)}` : 'No ID'}</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground text-center">{creator.bio || 'No bio available.'}</p>
@@ -179,7 +200,7 @@ export default function BookingPage() {
             </CardContent>
           </Card>
         )}
-        {isConnected && !hasRequiredToken && creator.tokens && creator.tokens.length > 0 && (
+        {isConnected && creator.tokens.length > 0 && !hasRequiredToken && (
            <Card className="bg-destructive/10 border-destructive/30 shadow-lg">
             <CardContent className="pt-6 text-center">
               <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-2" />
@@ -190,13 +211,21 @@ export default function BookingPage() {
             </CardContent>
           </Card>
         )}
-         {isConnected && hasRequiredToken && (
+         {isConnected && creator.tokens.length > 0 && hasRequiredToken && (
            <Card className="bg-green-500/10 border-green-500/30 shadow-lg">
             <CardContent className="pt-6 text-center flex items-center justify-center">
               <CheckCircle className="h-6 w-6 text-green-400 mr-2" />
               <p className="font-semibold text-green-400">You hold the required token!</p>
             </CardContent>
           </Card>
+        )}
+         {creator.tokens.length === 0 && (
+             <Card className="bg-muted/20 border-border shadow-md">
+                <CardContent className="pt-6 text-center">
+                    <Info className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="font-semibold text-muted-foreground">This creator has not set up any specific tokens for booking yet.</p>
+                </CardContent>
+            </Card>
         )}
       </div>
 
@@ -227,7 +256,7 @@ export default function BookingPage() {
                       onClick={(e) => { e.stopPropagation(); handleBookSlot(slot); }} // Prevent card click, handle booking
                       variant={selectedSlot === slot ? "default" : "outline"} 
                       size="sm"
-                      disabled={!isConnected || !hasRequiredToken || isBooking || !creator || !creator.tokens || creator.tokens.length === 0}
+                      disabled={!isConnected || (creator.tokens.length > 0 && !hasRequiredToken) || isBooking || !creator}
                     >
                       {isBooking && selectedSlot === slot ? <Loader2 className="h-4 w-4 animate-spin" /> : (selectedSlot === slot ? "Confirm Booking" : "Book Slot")}
                     </Button>
@@ -251,3 +280,4 @@ export default function BookingPage() {
     </div>
   );
 }
+

@@ -1,3 +1,4 @@
+
 export type NavItem = {
   title: string;
   href: string;
@@ -28,6 +29,10 @@ export const siteConfig: SiteConfig = {
     {
       title: "Dashboard",
       href: "/dashboard",
+    },
+    {
+      title: "My Profile",
+      href: "/dashboard/profile",
     },
     {
       title: "Mint Token",

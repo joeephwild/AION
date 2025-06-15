@@ -1,15 +1,14 @@
 
-export type Creator = {
-  id: string; // Wallet address
-  name?: string;
+
+export type CreatorProfileData = {
+  name: string; 
   bio?: string;
   avatarUrl?: string;
-  tokens: Token[]; // Will now be Zora Coins created by the user
-  calendarIntegrations: {
-    google?: boolean;
-    outlook?: boolean;
-  };
-  availabilitySettings?: AvailabilitySettings; 
+};
+
+// Represents the data returned by /api/creators/[creatorId]
+export type CreatorPublicProfile = CreatorProfileData & {
+  id: string; // Wallet address
 };
 
 export type Token = {
@@ -19,8 +18,12 @@ export type Token = {
   creatorId: string; // Wallet address of creator (payoutRecipient)
   uri?: string; // Metadata URI
   totalSupply?: string; // Zora SDK might return as string or BigInt, handle accordingly
-  // Potentially add more fields from Zora's getCoin response like imageUrl, description
   imageUrl?: string; 
+};
+
+// Type used by BookingPage and DashboardPage. It combines public profile with dynamic token data.
+export type Creator = CreatorPublicProfile & {
+  tokens: Token[];
 };
 
 export type Booking = {
@@ -52,3 +55,4 @@ export type AvailabilitySettings = {
   bufferTime: number; // minutes
   minNoticeTime: number; // hours
 };
+
