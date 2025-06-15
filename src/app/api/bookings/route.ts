@@ -2,43 +2,48 @@
 // /src/app/api/bookings/route.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, getDocs, query, where, Timestamp, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import type { Booking } from '@/types';
-
-const dbPath = path.join(process.cwd(), 'data', 'mock-db.json');
-
-async function readDb(): Promise<{ users: any; bookings: Booking[] }> {
-  try {
-    const data = await fs.readFile(dbPath, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    // If file doesn't exist or is invalid, return a default structure
-    return { users: {}, bookings: [] };
-  }
-}
-
-async function writeDb(data: any): Promise<void> {
-  await fs.writeFile(dbPath, JSON.stringify(data, null, 2), 'utf-8');
-}
 
 // GET /api/bookings?creatorId=...
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const creatorId = searchParams.get('creatorId');
-  // const clientId = searchParams.get('clientId'); // If we need to fetch by client
+  // const clientId = searchParams.get('clientId'); // Future: If we need to fetch by client
 
   if (!creatorId) {
     return NextResponse.json({ success: false, message: 'creatorId is required' }, { status: 400 });
   }
 
   try {
-    const db = await readDb();
-    const creatorBookings = db.bookings.filter(b => b.creatorId === creatorId);
-    return NextResponse.json({ success: true, bookings: creatorBookings });
+    const bookingsRef = collection(db, 'bookings');
+    const q = query(bookingsRef, where('creatorId', '==', creatorId));
+    const querySnapshot = await getDocs(q);
+
+    const fetchedBookings: Booking[] = [];
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      fetchedBookings.push({
+        id: docSnap.id,
+        creatorId: data.creatorId,
+        clientId: data.clientId,
+        tokenId: data.tokenId,
+        // Convert Firestore Timestamps to JS Date objects
+        startTime: (data.startTime as Timestamp).toDate(),
+        endTime: (data.endTime as Timestamp).toDate(),
+        status: data.status,
+      });
+    });
+
+    // Sort by startTime, most recent first (or ascending as preferred)
+    fetchedBookings.sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
+
+    return NextResponse.json({ success: true, bookings: fetchedBookings });
   } catch (error) {
-    console.error('Failed to fetch bookings:', error);
-    return NextResponse.json({ success: false, message: 'Failed to fetch bookings' }, { status: 500 });
+    console.error('Failed to fetch bookings from Firestore:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    return NextResponse.json({ success: false, message: 'Failed to fetch bookings', error: errorMessage }, { status: 500 });
   }
 }
 
@@ -57,23 +62,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'Missing required booking fields' }, { status: 400 });
     }
 
-    const db = await readDb();
-    const newBooking: Booking = {
-      id: `book_${Date.now().toString()}_${Math.random().toString(36).substring(2, 9)}`,
+    // Convert ISO string dates from client to Firestore Timestamps
+    const startTimeDate = new Date(startTime);
+    const endTimeDate = new Date(endTime);
+
+    if (isNaN(startTimeDate.getTime()) || isNaN(endTimeDate.getTime())) {
+        return NextResponse.json({ success: false, message: 'Invalid date format for startTime or endTime' }, { status: 400 });
+    }
+
+    const newBookingData = {
       creatorId,
       clientId,
       tokenId,
-      startTime: new Date(startTime), // Ensure dates are stored as Date objects if read back directly, or handle as strings consistently
-      endTime: new Date(endTime),
-      status: 'confirmed', // Default to confirmed for mock
+      startTime: Timestamp.fromDate(startTimeDate),
+      endTime: Timestamp.fromDate(endTimeDate),
+      status: 'confirmed' as Booking['status'], // Default to confirmed
+      createdAt: serverTimestamp(), // Optional: for auditing or sorting by creation time
     };
 
-    db.bookings.push(newBooking);
-    await writeDb(db);
+    const bookingsRef = collection(db, 'bookings');
+    const docRef = await addDoc(bookingsRef, newBookingData);
 
-    return NextResponse.json({ success: true, booking: newBooking }, { status: 201 });
+    // To return the full booking object including the ID and converted dates:
+    const createdBooking: Booking = {
+        id: docRef.id,
+        creatorId: newBookingData.creatorId,
+        clientId: newBookingData.clientId,
+        tokenId: newBookingData.tokenId,
+        startTime: startTimeDate, // Return as JS Date
+        endTime: endTimeDate,     // Return as JS Date
+        status: newBookingData.status,
+    };
+
+    return NextResponse.json({ success: true, booking: createdBooking }, { status: 201 });
   } catch (error) {
-    console.error('Failed to create booking:', error);
+    console.error('Failed to create booking in Firestore:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     return NextResponse.json({ success: false, message: 'Failed to create booking', error: errorMessage }, { status: 500 });
   }
