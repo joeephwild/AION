@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useActiveAccount } from "thirdweb/react";
 import { useState, useEffect, useCallback } from "react";
 import { Save, AlertTriangle, CalendarClock, Clock, List, CalendarIcon as LucideCalendarIcon, Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast, useToast } from "@/hooks/use-toast";
 import type { WorkingHour, AvailabilitySettings, CalendarEvent } from "@/types";
 import { format } from "date-fns";
 import { apiCalendar } from '@/lib/google-calendar';
@@ -47,13 +46,12 @@ export default function AvailabilityPage() {
   const [bufferTime, setBufferTime] = useState<number>(defaultSettings.bufferTime);
   const [minNoticeTime, setMinNoticeTime] = useState<number>(defaultSettings.minNoticeTime);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  
+
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState<CalendarEvent[]>([]);
   const [outlookCalendarEvents, setOutlookCalendarEvents] = useState<CalendarEvent[]>([]); 
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-
 
   const fetchGoogleCalendarEvents = useCallback(async () => {
     if (!isGoogleSignedIn || !apiCalendar || !GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) {
@@ -260,9 +258,15 @@ export default function AvailabilityPage() {
     }
   }, [isGoogleSignedIn, fetchGoogleCalendarEvents, initialLoadComplete]);
 
+        return () => {
+          window.removeEventListener('googleCalendarConnected', handleGoogleConnected);
+          window.removeEventListener('googleCalendarDisconnected', handleGoogleDisconnected);
+        };
+    }
+  }, [fetchGoogleCalendarEvents, address]);
 
   const handleWorkingHourChange = (day: string, field: keyof WorkingHour, value: string | boolean) => {
-    setWorkingHours(prev => 
+    setWorkingHours(prev =>
       prev.map(wh => wh.day === day ? { ...wh, [field]: value } : wh)
     );
   };
@@ -293,8 +297,6 @@ export default function AvailabilityPage() {
       setIsSaving(false);
     }
   };
-  
-  const allCalendarEvents = [...googleCalendarEvents, ...outlookCalendarEvents].sort((a,b) => a.start.getTime() - b.start.getTime());
 
   if (!initialLoadComplete || isLoadingSettings) {
     return (
@@ -349,16 +351,16 @@ export default function AvailabilityPage() {
                       onCheckedChange={(checked) => handleWorkingHourChange(wh.day, 'enabled', checked)}
                       className="justify-self-start sm:justify-self-center"
                     />
-                    <Input 
-                      type="time" 
-                      value={wh.startTime} 
+                    <Input
+                      type="time"
+                      value={wh.startTime}
                       onChange={(e) => handleWorkingHourChange(wh.day, 'startTime', e.target.value)}
                       disabled={!wh.enabled}
                       className={!wh.enabled ? 'opacity-50' : ''}
                     />
-                    <Input 
-                      type="time" 
-                      value={wh.endTime} 
+                    <Input
+                      type="time"
+                      value={wh.endTime}
                       onChange={(e) => handleWorkingHourChange(wh.day, 'endTime', e.target.value)}
                       disabled={!wh.enabled}
                       className={!wh.enabled ? 'opacity-50' : ''}
@@ -458,7 +460,7 @@ export default function AvailabilityPage() {
                 </p>
             </CardFooter>
           </Card>
-          
+
           <Card className="shadow-lg">
             <CardHeader>
                 <CardTitle>Override Availability</CardTitle>

@@ -36,7 +36,7 @@ export function CalendarConnect() {
   const account = useActiveAccount();
   const address = account?.address;
   const { toast } = useToast();
-  
+
   const [connections, setConnections] = useState<ConnectionStatus>({ google: false, outlook: false });
   const [isFetchingStatus, setIsFetchingStatus] = useState(true);
   const [isUpdating, setIsUpdating] = useState<null | 'google' | 'outlook'>(null);
@@ -149,22 +149,19 @@ export function CalendarConnect() {
       }
       return;
     }
-
-    if (typeof apiCalendar.onLoad !== 'function') {
-        console.error("CalendarConnect: apiCalendar.onLoad method is not available.", { currentApiCalendar: apiCalendar });
-        setIsGoogleApiLoaded(false);
-        return;
-    }
-    
-    apiCalendar.onLoad(() => {
-      setIsGoogleApiLoaded(true);
-      if (typeof apiCalendar.sign === 'boolean') {
-         // Update component state based on library's current sign-in status
-        handleGoogleSignInStateChange(apiCalendar.sign);
-      } else {
-        console.warn("CalendarConnect: apiCalendar.sign is not a boolean after GAPI onLoad. Initial state might be inaccurate.");
-        handleGoogleSignInStateChange(false);
-      }
+    gapi.load('client:auth2', () => {
+      gapi.client.init({
+        apiKey: GOOGLE_API_KEY, // May not be strictly necessary for OAuth token flow but good for discovery doc
+        clientId: GOOGLE_CLIENT_ID,
+        scope: GOOGLE_SCOPES,
+        discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest"]
+      }).then(() => {
+        callback();
+      }).catch(error => {
+        console.error("Error initializing Google API client:", error);
+        toast({ title: "Google API Init Failed", description: "Could not initialize Google Calendar client.", variant: "destructive" });
+        setIsUpdating(null);
+      });
     });
     // No direct equivalent for listenSign, state is managed by onLoad and explicit actions
   }, [address, handleGoogleSignInStateChange, connections.google]);
@@ -252,10 +249,10 @@ export function CalendarConnect() {
               <span>Google Calendar Connected</span>
               <CheckCircle className="ml-2 h-5 w-5 text-green-500" />
             </div>
-            <Button 
-              variant="link" 
-              size="sm" 
-              onClick={handleGoogleDisconnect} 
+            <Button
+              variant="link"
+              size="sm"
+              onClick={handleGoogleDisconnect}
               className="text-destructive"
               disabled={isUpdating === 'google'}
             >
@@ -263,8 +260,8 @@ export function CalendarConnect() {
             </Button>
           </div>
         ) : (
-          <Button 
-            onClick={handleGoogleConnect} 
+          <Button
+            onClick={handleGoogleConnect}
             className="w-full justify-start bg-card hover:bg-muted/50 text-foreground border shadow-sm"
             disabled={isUpdating === 'google' || !account || !GOOGLE_CLIENT_ID || !GOOGLE_API_KEY || (!!GOOGLE_CLIENT_ID && !!GOOGLE_API_KEY && !isGoogleApiLoaded) }
             title={(!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) ? "Google integration not configured by admin" : (!isGoogleApiLoaded ? "Google API still loading..." : "Connect Google Calendar")}
@@ -286,10 +283,10 @@ export function CalendarConnect() {
               <span>Outlook Calendar Connected</span>
               <CheckCircle className="ml-2 h-5 w-5 text-green-500" />
             </div>
-            <Button 
-              variant="link" 
-              size="sm" 
-              onClick={handleOutlookToggle} 
+            <Button
+              variant="link"
+              size="sm"
+              onClick={handleOutlookToggle}
               className="text-destructive"
               disabled={isUpdating === 'outlook'}
             >
@@ -297,8 +294,8 @@ export function CalendarConnect() {
             </Button>
           </div>
         ) : (
-          <Button 
-            onClick={handleOutlookToggle} 
+          <Button
+            onClick={handleOutlookToggle}
             className="w-full justify-start bg-card hover:bg-muted/50 text-foreground border shadow-sm"
             disabled={isUpdating === 'outlook' || !account}
           >

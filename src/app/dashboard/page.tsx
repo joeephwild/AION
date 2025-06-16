@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -38,7 +37,7 @@ export default function DashboardPage() {
         try {
           const storedTokensString = localStorage.getItem(`userTokens_${address}`);
           const storedCoinAddresses: { id: string, name: string, symbol: string, uri?: string, creatorId: string }[] = storedTokensString ? JSON.parse(storedTokensString) : [];
-          
+
           const fetchedTokens: Token[] = [];
           for (const basicTokenInfo of storedCoinAddresses) {
             try {

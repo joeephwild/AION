@@ -1,4 +1,3 @@
-
 import ApiCalendar from 'react-google-calendar-api';
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
@@ -27,7 +26,7 @@ if (typeof window !== 'undefined') { // Ensure this runs only on the client-side
       "Forcing mock Google Calendar integration to prevent errors and mitigate security risks."
     );
     // mockReason can be augmented if other reasons also exist, but the GOCSPX- is overriding.
-    mockReason = "Potentially incorrect Google API Key (Client Secret detected)."; 
+    mockReason = "Potentially incorrect Google API Key (Client Secret detected).";
   }
 
   if (useMock) {

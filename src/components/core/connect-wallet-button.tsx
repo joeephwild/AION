@@ -1,4 +1,3 @@
-
 'use client';
 
 import { ConnectButton } from "thirdweb/react";
@@ -52,7 +51,7 @@ export function ConnectWalletButton() {
       connectModal={{
         size: "compact", // "compact" or "wide"
         title: `Connect to ${siteConfig.name}`,
-        titleIconUrl: `${siteConfig.url}/icon.png`,
+        // titleIconUrl: `${siteConfig.url}/icon.png`,
         welcomeScreen: {
           title: `Welcome to ${siteConfig.name}`,
           subtitle: siteConfig.description,
@@ -63,7 +62,7 @@ export function ConnectWalletButton() {
         // displayBalanceToken: { [baseSepolia.id]: "0x..." }, // Optional: Display balance of a specific token on Base Sepolia
         // chains: [baseSepolia] // Show details only for Base Sepolia
       }}
-      
+
     />
   );
 }
