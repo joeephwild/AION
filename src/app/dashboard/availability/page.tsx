@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -72,7 +73,7 @@ export default function AvailabilityPage() {
     setIsLoadingEvents(true);
     try {
       console.log("Attempting to fetch Google Calendar events...");
-      const response: any = await apiCalendar.listUpcomingEvents(10); // Fetches next 10 events
+      const response: any = await apiCalendar.listUpcomingEvents(10); 
       console.log("Google Calendar API raw response:", response);
 
       if (response && response.result && Array.isArray(response.result.items)) {
@@ -80,7 +81,7 @@ export default function AvailabilityPage() {
           title: event.summary || 'No Title (Google)',
           start: new Date(event.start.dateTime || event.start.date),
           end: new Date(event.end.dateTime || event.end.date),
-          isAllDay: !!event.start.date, // Check if it's an all-day event
+          isAllDay: !!event.start.date, 
         }));
         setGoogleCalendarEvents(events);
         console.log("Fetched Google Calendar events:", events);
@@ -93,7 +94,6 @@ export default function AvailabilityPage() {
       }
        else {
         console.warn("Google Calendar API response did not contain expected items array or error structure:", response);
-        // toast({ title: "No Google Events", description: "No upcoming events found or response malformed.", variant: "default" });
         setGoogleCalendarEvents([]);
       }
     } catch (error: any) {
@@ -145,7 +145,6 @@ export default function AvailabilityPage() {
             setBufferTime(data.settings.bufferTime || defaultSettings.bufferTime);
             setMinNoticeTime(data.settings.minNoticeTime || defaultSettings.minNoticeTime);
           } else if (data.success && data.settings === null) {
-            // User exists but no settings saved yet, use defaults
             setWorkingHours(defaultSettings.workingHours);
             setBufferTime(defaultSettings.bufferTime);
             setMinNoticeTime(defaultSettings.minNoticeTime);
@@ -162,7 +161,7 @@ export default function AvailabilityPage() {
           setIsLoadingSettings(false);
         }
       } else if (!isConnected) {
-        setIsLoadingSettings(false); // Not loading if not connected
+        setIsLoadingSettings(false); 
         setWorkingHours(defaultSettings.workingHours);
         setBufferTime(defaultSettings.bufferTime);
         setMinNoticeTime(defaultSettings.minNoticeTime);
@@ -177,7 +176,6 @@ export default function AvailabilityPage() {
  useEffect(() => {
     async function fetchMockOutlookEvents() {
       if (isConnected && address) {
-         // This API now checks Firestore for outlook connection status
         const response = await fetch(`/api/calendar/events?creatorId=${address}`);
         const data = await response.json();
         if (data.success && Array.isArray(data.events)) {
@@ -204,7 +202,6 @@ export default function AvailabilityPage() {
     const handleGoogleConnected = () => {
       console.log("AvailabilityPage: googleCalendarConnected event received");
       setIsGoogleSignedIn(true);
-      // fetchGoogleCalendarEvents will be called due to isGoogleSignedIn changing
     };
     const handleGoogleDisconnected = () => {
       console.log("AvailabilityPage: googleCalendarDisconnected event received");
@@ -212,16 +209,14 @@ export default function AvailabilityPage() {
       setGoogleCalendarEvents([]);
     };
 
-    // Initial check for Google sign-in state, esp. on page load/refresh
     if (typeof window !== 'undefined' && apiCalendar && GOOGLE_CLIENT_ID && GOOGLE_API_KEY) {
         const initiallyConnected = localStorage.getItem(`google_calendar_connected_${address}`) === 'true';
         if (initiallyConnected) {
              console.log("AvailabilityPage: Google initially connected via localStorage flag.");
-             // Check the library's actual sign-in state once it's loaded
              apiCalendar.onLoad(() => {
                 if (apiCalendar.sign) {
                     console.log("AvailabilityPage: apiCalendar.sign is true, setting signedIn and fetching.");
-                    setIsGoogleSignedIn(true); // This will trigger fetchGoogleCalendarEvents
+                    setIsGoogleSignedIn(true); 
                 } else {
                     console.log("AvailabilityPage: apiCalendar.sign is false despite localStorage. Resetting.");
                     localStorage.removeItem(`google_calendar_connected_${address}`);
@@ -229,41 +224,32 @@ export default function AvailabilityPage() {
                 }
              });
         } else {
-            // If not connected via localStorage, still set initialLoadComplete.
-            // This helps manage the initial loader for the whole page.
              apiCalendar.onLoad(() => {
-                setIsGoogleSignedIn(apiCalendar.sign); // Set based on library state
+                setIsGoogleSignedIn(apiCalendar.sign); 
              });
         }
     } else {
-        // If Google integration not possible, mark as not signed in.
         setIsGoogleSignedIn(false);
     }
     
     window.addEventListener('googleCalendarConnected', handleGoogleConnected);
     window.addEventListener('googleCalendarDisconnected', handleGoogleDisconnected);
     
-    setInitialLoadComplete(true); // Mark initial setup as complete
+    setInitialLoadComplete(true); 
 
     return () => {
       window.removeEventListener('googleCalendarConnected', handleGoogleConnected);
       window.removeEventListener('googleCalendarDisconnected', handleGoogleDisconnected);
     };
-  }, [address]); // Only address, as fetchGoogleCalendarEvents is memoized
+  }, [address]); 
 
   // Effect to fetch Google Calendar events when isGoogleSignedIn changes
   useEffect(() => {
-    if (isGoogleSignedIn && initialLoadComplete) { // Fetch only if signed in and initial page load has passed relevant checks
+    if (isGoogleSignedIn && initialLoadComplete) { 
       fetchGoogleCalendarEvents();
     }
   }, [isGoogleSignedIn, fetchGoogleCalendarEvents, initialLoadComplete]);
 
-        return () => {
-          window.removeEventListener('googleCalendarConnected', handleGoogleConnected);
-          window.removeEventListener('googleCalendarDisconnected', handleGoogleDisconnected);
-        };
-    }
-  }, [fetchGoogleCalendarEvents, address]);
 
   const handleWorkingHourChange = (day: string, field: keyof WorkingHour, value: string | boolean) => {
     setWorkingHours(prev =>
@@ -297,6 +283,15 @@ export default function AvailabilityPage() {
       setIsSaving(false);
     }
   };
+
+  const allCalendarEvents = [...googleCalendarEvents, ...outlookCalendarEvents]
+    .map(event => ({
+        ...event,
+        start: new Date(event.start), // Ensure start is a Date object
+        end: new Date(event.end),     // Ensure end is a Date object
+    }))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
 
   if (!initialLoadComplete || isLoadingSettings) {
     return (
@@ -482,3 +477,6 @@ export default function AvailabilityPage() {
     </div>
   );
 }
+
+
+    
