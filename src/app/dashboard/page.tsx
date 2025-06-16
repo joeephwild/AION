@@ -1,10 +1,11 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import Link from "next/link";
-import { PlusCircle, CalendarDays, ListChecks, Settings, ExternalLink, Edit3, Eye, Zap, Loader2 } from "lucide-react";
+import { PlusCircle, CalendarDays, ListChecks, Settings, ExternalLink, Eye, Zap, Loader2 } from "lucide-react";
 import { CalendarConnect } from "@/components/core/calendar-connect";
 import Image from "next/image";
 import type { Token, Booking } from "@/types";
@@ -12,7 +13,7 @@ import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { useToast } from "@/hooks/use-toast";
 import { getCoin } from "@zoralabs/coins-sdk";
-import { baseSepolia } from "thirdweb/chains"; // Changed from base to baseSepolia
+import { baseSepolia } from "thirdweb/chains"; 
 
 export default function DashboardPage() {
   const account = useActiveAccount();
@@ -33,45 +34,53 @@ export default function DashboardPage() {
         setIsLoadingTokens(true);
         setIsLoadingBookings(true);
 
-        // Fetch Zora tokens created by user (from localStorage for now)
+        // Fetch tokens from Firestore via API
         try {
-          const storedTokensString = localStorage.getItem(`userTokens_${address}`);
-          const storedCoinAddresses: { id: string, name: string, symbol: string, uri?: string, creatorId: string }[] = storedTokensString ? JSON.parse(storedTokensString) : [];
+          const tokensResponse = await fetch(`/api/tokens?creatorId=${address}`);
+          const tokensData = await tokensResponse.json();
 
-          const fetchedTokens: Token[] = [];
-          for (const basicTokenInfo of storedCoinAddresses) {
-            try {
-              // Fetch details from Base Sepolia
-              const response = await getCoin({ address: basicTokenInfo.id, chain: baseSepolia.id }); 
-              const coinData = response.data?.zora20Token;
-              if (coinData) {
-                fetchedTokens.push({
-                  id: coinData.address,
-                  name: coinData.name || basicTokenInfo.name,
-                  symbol: coinData.symbol || basicTokenInfo.symbol,
-                  creatorId: coinData.creatorAddress || basicTokenInfo.creatorId,
-                  totalSupply: coinData.totalSupply?.toString(),
-                  uri: coinData?.tokenURI,
-                  imageUrl: coinData?.mediaContent?.previewImage as string,
-                });
-              } else {
-                 // Fallback to basic info if getCoin fails or returns no data
-                fetchedTokens.push(basicTokenInfo as Token);
+          if (tokensResponse.ok && tokensData.success && Array.isArray(tokensData.tokens)) {
+            const firestoreTokens: Token[] = tokensData.tokens.map((t: any) => ({
+                ...t,
+                createdAt: t.createdAt ? new Date(t.createdAt) : undefined, // Ensure createdAt is a Date
+            }));
+
+            const enrichedTokens: Token[] = [];
+            for (const basicTokenInfo of firestoreTokens) {
+              try {
+                const response = await getCoin({ address: basicTokenInfo.id, chain: baseSepolia.id });
+                const coinData = response.data?.zora20Token;
+                if (coinData) {
+                  enrichedTokens.push({
+                    ...basicTokenInfo, // Keep Firestore data like name, symbol, uri from our DB
+                    id: coinData.address, // Ensure ID is from on-chain source if different (should match)
+                    name: coinData.name || basicTokenInfo.name, // Prefer on-chain if available
+                    symbol: coinData.symbol || basicTokenInfo.symbol, // Prefer on-chain
+                    totalSupply: coinData.totalSupply?.toString(),
+                    imageUrl: coinData?.mediaContent?.previewImage as string || basicTokenInfo.imageUrl,
+                    // Retain uri from Firestore as the canonical one for metadata
+                  });
+                } else {
+                  enrichedTokens.push(basicTokenInfo); // Fallback to Firestore data if getCoin fails
+                }
+              } catch (error) {
+                console.warn(`Failed to fetch on-chain details for coin ${basicTokenInfo.id} on Base Sepolia:`, error);
+                enrichedTokens.push(basicTokenInfo); 
               }
-            } catch (error) {
-              console.warn(`Failed to fetch details for coin ${basicTokenInfo.id} on Base Sepolia:`, error);
-              fetchedTokens.push(basicTokenInfo as Token); // Add basic info if detailed fetch fails
             }
+            setUserTokens(enrichedTokens.sort((a,b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0) )); // Sort by Firestore createdAt
+          } else {
+            throw new Error(tokensData.message || 'Failed to fetch tokens from API');
           }
-          setUserTokens(fetchedTokens.reverse()); // Show newest first
         } catch (error) {
-          console.error("Error fetching tokens:", error);
-          toast({ title: "Error Fetching Tokens", description: "Could not load your created tokens.", variant: "destructive" });
+          console.error("Error fetching tokens from API/Firestore:", error);
+          toast({ title: "Error Fetching Tokens", description: error instanceof Error ? error.message : "Could not load your created tokens.", variant: "destructive" });
+          setUserTokens([]);
         } finally {
           setIsLoadingTokens(false);
         }
         
-        // Fetch bookings (still from mock for now)
+        // Fetch bookings from Firestore via API
         try {
           const bookingsResponse = await fetch(`/api/bookings?creatorId=${address}`);
           const bookingsData = await bookingsResponse.json();
@@ -105,7 +114,7 @@ export default function DashboardPage() {
   }, [isConnected, address, toast]);
 
 
-  if (isLoading && isConnected) { // Only show main loader if connected and initial load pending
+  if (isLoading && isConnected) { 
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -143,7 +152,7 @@ export default function DashboardPage() {
         <Card className="md:col-span-2 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Zap className="h-6 w-6 text-primary" /> My Zora Time Tokens (Base Sepolia)</CardTitle>
-            <CardDescription>View and manage your minted Zora time tokens. (Data from local storage & Zora SDK on Base Sepolia)</CardDescription>
+            <CardDescription>View and manage your minted Zora time tokens. (Data from Firestore & Zora SDK on Base Sepolia)</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingTokens ? (
@@ -157,12 +166,11 @@ export default function DashboardPage() {
                   <li key={token.id} className="p-4 border rounded-lg bg-background hover:bg-muted/30 transition-colors">
                     <div className="flex justify-between items-start">
                       <div className="flex items-start gap-4">
-                        {token.imageUrl && (
+                        {token.imageUrl ? (
                            <Image src={token.imageUrl} alt={token.name} width={64} height={64} className="rounded-md aspect-square object-cover" data-ai-hint="token icon" />
-                        )}
-                        {!token.imageUrl && token.id && ( // Placeholder if no image
+                        ) : ( 
                           <div className="w-16 h-16 bg-muted rounded-md flex items-center justify-center text-primary text-2xl font-bold">
-                            {token.symbol ? token.symbol.charAt(0) : '?'}
+                            {token.symbol ? token.symbol.charAt(0).toUpperCase() : '?'}
                           </div>
                         )}
                         <div>
@@ -174,6 +182,7 @@ export default function DashboardPage() {
                                 URI: <Link href={token.uri.startsWith('ipfs://') ? `https://ipfs.io/ipfs/${token.uri.substring(7)}` : token.uri} target="_blank" className="text-accent hover:underline">{token.uri}</Link>
                             </p>
                            )}
+                           {token.createdAt && <p className="text-xs text-muted-foreground">Created: {token.createdAt.toLocaleDateString()}</p>}
                         </div>
                       </div>
                       <div className="flex gap-2 mt-2 sm:mt-0">
@@ -190,7 +199,7 @@ export default function DashboardPage() {
             ) : (
               <div className="text-center py-8">
                 <Image src="https://placehold.co/300x200.png" data-ai-hint="empty state tokens" alt="No tokens" width={300} height={200} className="mx-auto mb-4 rounded-md opacity-50" />
-                <p className="text-muted-foreground">You haven't minted any Zora tokens on Base Sepolia yet, or none were found in local storage.</p>
+                <p className="text-muted-foreground">You haven't minted any Zora tokens on Base Sepolia yet, or none were found in Firestore.</p>
                 <Button variant="link" asChild className="text-primary hover:text-accent">
                   <Link href="/mint">Mint your first token</Link>
                 </Button>
@@ -220,7 +229,7 @@ export default function DashboardPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><ListChecks className="h-6 w-6 text-primary" /> My Bookings</CardTitle>
-          <CardDescription>View and manage upcoming and past bookings.</CardDescription>
+          <CardDescription>View and manage upcoming and past bookings. (Data from Firestore)</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoadingBookings ? (
@@ -238,7 +247,6 @@ export default function DashboardPage() {
                       <p className="text-sm text-muted-foreground">
                         {booking.startTime.toLocaleString()} - {booking.endTime.toLocaleTimeString()}
                       </p>
-                      {/* Link to token on Sepolia Basescan. Ensure tokenId is an address. */}
                       <p className="text-sm text-muted-foreground">Token ID: <Link href={`https://sepolia.basescan.org/token/${booking.tokenId}`} target="_blank" className="text-accent hover:underline">{`${booking.tokenId.slice(0,10)}...`}</Link></p>
                     </div>
                     <div className="mt-2 sm:mt-0">
@@ -257,7 +265,7 @@ export default function DashboardPage() {
           ) : (
              <div className="text-center py-8">
                 <Image src="https://placehold.co/300x200.png" data-ai-hint="empty state bookings" alt="No bookings" width={300} height={200} className="mx-auto mb-4 rounded-md opacity-50" />
-                <p className="text-muted-foreground">No bookings found.</p>
+                <p className="text-muted-foreground">No bookings found in Firestore.</p>
               </div>
           )}
         </CardContent>

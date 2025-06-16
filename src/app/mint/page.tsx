@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,7 +16,7 @@ import { baseSepolia } from "thirdweb/chains";
 import { createCoinCall, getCoinCreateFromLogs } from "@zoralabs/coins-sdk";
 import { type Address, createPublicClient, http } from "viem";
 import Link from "next/link";
-import type { Token } from "@/types";
+import type { Token } from "@/types"; // Ensure Token type is imported
 import { client } from "@/lib/thirdweb";
 
 
@@ -55,7 +56,7 @@ export default function MintTokenPage() {
     defaultValues: {
       name: "",
       symbol: "",
-      uri: "ipfs://bafybeigoxzqzbnxsn35vq7lls3ljxdcwjafxvbvkivprsodzrptpiguysy",
+      uri: "ipfs://bafybeigoxzqzbnxsn35vq7lls3ljxdcwjafxvbvkivprsodzrptpiguysy", // Example valid IPFS URI
     },
   });
 
@@ -84,25 +85,18 @@ export default function MintTokenPage() {
         initialPurchaseWei: 0n,
       };
       console.log("Zora coin parameters for createCoinCall:", coinParams);
-
-      // createCoinCall is expected to return an object that useSendTransaction can use directly.
-      // This object typically includes { address (contract), abi, functionName, args, value }
+      
       const contractCallTx = await createCoinCall(coinParams);
       console.log('Value of contractCallTx after await createCoinCall:', contractCallTx ? JSON.stringify(contractCallTx, (key, value) => typeof value === 'bigint' ? value.toString() : value, 2) : contractCallTx);
 
-
-      // Validate the structure of contractCallTx based on Zora SDK's expected output for contract calls
-      // It should have `address` (contract to call), `args` (function arguments), and `value`.
-      // `abi` and `functionName` are also part of this structure and used by `useSendTransaction`.
       if (
         !contractCallTx ||
         typeof contractCallTx.address !== 'string' || // This is the contract address, effectively 'to'
         !Array.isArray(contractCallTx.args) ||       // These are the function arguments for encoding 'data'
         typeof contractCallTx.value === 'undefined'   // Transaction value (can be 0n, so check for undefined if mandatory)
-                                                      // `abi` and `functionName` are also critical for this type of tx object
       ) {
         console.error(
-          'Zora SDK `createCoinCall` returned an invalid transaction object. Expected properties `address`, `args`, `value` (and typically `abi`, `functionName`). Got:',
+          'Zora SDK `createCoinCall` returned an invalid transaction object. Expected properties `address`, `args`, `value`. Got:',
           JSON.stringify(contractCallTx, (key, val) =>
             typeof val === 'bigint' ? val.toString() : val, 2)
         );
@@ -117,14 +111,13 @@ export default function MintTokenPage() {
         return;
       }
 
+
       setMintingStep("Please confirm in your wallet...");
       console.log("Prepared Zora coin transaction for Base Sepolia. Ready to send:", contractCallTx);
       console.log("Using Thirdweb client:", client, "and chain:", baseSepolia);
 
       sendTransaction(
         {
-          // Pass contractCallTx directly. Thirdweb's useSendTransaction
-          // can handle objects with { address, abi, functionName, args, value }.
           ...contractCallTx,
           chain: baseSepolia,
           client: client,
@@ -147,16 +140,42 @@ export default function MintTokenPage() {
 
               const coinDeployment = getCoinCreateFromLogs(receipt);
               if (coinDeployment?.coin) {
-                console.log("Coin deployed successfully on Base Sepolia. Address:", coinDeployment.coin);
-                setDeployedCoinAddress(coinDeployment.coin);
+                const finalCoinAddress = coinDeployment.coin;
+                console.log("Coin deployed successfully on Base Sepolia. Address:", finalCoinAddress);
+                setDeployedCoinAddress(finalCoinAddress);
+                
+                // Save token to Firestore via API
+                setMintingStep("Saving token details to Aion...");
+                const tokenToSave: Omit<Token, 'createdAt' | 'totalSupply' | 'imageUrl'> = {
+                  id: finalCoinAddress,
+                  name: values.name,
+                  symbol: values.symbol,
+                  uri: values.uri,
+                  creatorId: address,
+                };
+
+                const saveResponse = await fetch('/api/tokens', {
+                  method: 'POST',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'x-user-id': address, 
+                  },
+                  body: JSON.stringify(tokenToSave),
+                });
+
+                if (!saveResponse.ok) {
+                  const errorResult = await saveResponse.json();
+                  throw new Error(errorResult.message || 'Failed to save token to Aion backend.');
+                }
+                
                 toast({
-                  title: "Token Minted Successfully on Base Sepolia!",
-                  description: `Coin Address: ${coinDeployment.coin}`,
+                  title: "Token Minted & Saved!",
+                  description: `Coin Address: ${finalCoinAddress}`,
                   variant: "default",
                   duration: 8000,
                   action: (
                     <Button variant="link" size="sm" asChild>
-                      <Link href={`https://sepolia.basescan.org/address/${coinDeployment.coin}`} target="_blank">
+                      <Link href={`https://sepolia.basescan.org/address/${finalCoinAddress}`} target="_blank">
                         View on Sepolia Basescan <ExternalLink className="h-4 w-4 ml-1" />
                       </Link>
                     </Button>
@@ -164,26 +183,15 @@ export default function MintTokenPage() {
                 });
                 form.reset();
 
-                const newCoin: Token = {
-                  id: coinDeployment.coin,
-                  name: values.name,
-                  symbol: values.symbol,
-                  uri: values.uri,
-                  creatorId: address,
-                };
-                const existingTokensString = localStorage.getItem(`userTokens_${address}`);
-                const existingTokens: Token[] = existingTokensString ? JSON.parse(existingTokensString) : [];
-                localStorage.setItem(`userTokens_${address}`, JSON.stringify([...existingTokens, newCoin]));
-
               } else {
                 console.error("Could not extract coin address from logs. Receipt:", receipt);
                 throw new Error("Could not extract coin address from logs.");
               }
-            } catch (receiptError) {
-              console.error("Error processing transaction receipt:", receiptError);
+            } catch (processingError) { // Catch errors from receipt processing or Firestore save
+              console.error("Error processing transaction result or saving to Firestore:", processingError);
               toast({
-                title: "Receipt Processing Failed",
-                description: receiptError instanceof Error ? receiptError.message : "Could not get coin address from receipt.",
+                title: "Post-Mint Processing Failed",
+                description: processingError instanceof Error ? processingError.message : "Could not finalize token creation.",
                 variant: "destructive",
               });
             } finally {

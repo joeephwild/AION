@@ -19,6 +19,7 @@ export type Token = {
   uri?: string; // Metadata URI
   totalSupply?: string; // Zora SDK might return as string or BigInt, handle accordingly
   imageUrl?: string; 
+  createdAt?: Date; // Added for Firestore timestamp
 };
 
 // Type used by BookingPage and DashboardPage. It combines public profile with dynamic token data.
@@ -34,6 +35,7 @@ export type Booking = {
   startTime: Date;
   endTime: Date;
   status: 'confirmed' | 'pending' | 'cancelled';
+  createdAt?: any; // Firestore serverTimestamp
 };
 
 export type CalendarEvent = {
@@ -55,4 +57,5 @@ export type AvailabilitySettings = {
   bufferTime: number; // minutes
   minNoticeTime: number; // hours
 };
+
 
