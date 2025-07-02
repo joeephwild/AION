@@ -36,7 +36,7 @@ export default function DashboardPage() {
 
         // Fetch tokens from Firestore via API
         try {
-          const tokensResponse = await fetch(`/api/tokens?creatorId=${address}`);
+          const tokensResponse = await fetch(`/api/tokens?creatorId=${address}`, { cache: 'no-store' });
           const tokensData = await tokensResponse.json();
 
           if (tokensResponse.ok && tokensData.success && Array.isArray(tokensData.tokens)) {
@@ -82,7 +82,7 @@ export default function DashboardPage() {
         
         // Fetch bookings from Firestore via API
         try {
-          const bookingsResponse = await fetch(`/api/bookings?creatorId=${address}`);
+          const bookingsResponse = await fetch(`/api/bookings?creatorId=${address}`, { cache: 'no-store' });
           const bookingsData = await bookingsResponse.json();
           if (bookingsResponse.ok && bookingsData.success) {
             const bookingsWithDates = bookingsData.bookings.map((b: any) => ({
