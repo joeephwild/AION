@@ -14,23 +14,23 @@ import { useActiveAccount } from "thirdweb/react";
 import { useToast } from "@/hooks/use-toast";
 import { getCoin } from "@zoralabs/coins-sdk";
 import { baseSepolia } from "thirdweb/chains"; 
+import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
 
 export default function DashboardPage() {
   const account = useActiveAccount();
   const address = account?.address;
   const isConnected = !!address;
-  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
   const [userTokens, setUserTokens] = useState<Token[]>([]);
-  const [isLoadingTokens, setIsLoadingTokens] = useState(false);
+  const [isLoadingTokens, setIsLoadingTokens] = useState(true);
   const [userBookings, setUserBookings] = useState<Booking[]>([]);
-  const [isLoadingBookings, setIsLoadingBookings] = useState(false);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(true);
 
   useEffect(() => {
     async function fetchDashboardData() {
       if (isConnected && address) {
-        setIsLoading(true);
         setIsLoadingTokens(true);
         setIsLoadingBookings(true);
 
@@ -42,7 +42,7 @@ export default function DashboardPage() {
           if (tokensResponse.ok && tokensData.success && Array.isArray(tokensData.tokens)) {
             const firestoreTokens: Token[] = tokensData.tokens.map((t: any) => ({
                 ...t,
-                createdAt: t.createdAt ? new Date(t.createdAt) : undefined, // Ensure createdAt is a Date
+                createdAt: t.createdAt ? new Date(t.createdAt) : undefined,
             }));
 
             const enrichedTokens: Token[] = [];
@@ -52,23 +52,22 @@ export default function DashboardPage() {
                 const coinData = response.data?.zora20Token;
                 if (coinData) {
                   enrichedTokens.push({
-                    ...basicTokenInfo, // Keep Firestore data like name, symbol, uri from our DB
-                    id: coinData.address, // Ensure ID is from on-chain source if different (should match)
-                    name: coinData.name || basicTokenInfo.name, // Prefer on-chain if available
-                    symbol: coinData.symbol || basicTokenInfo.symbol, // Prefer on-chain
+                    ...basicTokenInfo,
+                    id: coinData.address,
+                    name: coinData.name || basicTokenInfo.name,
+                    symbol: coinData.symbol || basicTokenInfo.symbol,
                     totalSupply: coinData.totalSupply?.toString(),
                     imageUrl: coinData?.mediaContent?.previewImage as string || basicTokenInfo.imageUrl,
-                    // Retain uri from Firestore as the canonical one for metadata
                   });
                 } else {
-                  enrichedTokens.push(basicTokenInfo); // Fallback to Firestore data if getCoin fails
+                  enrichedTokens.push(basicTokenInfo);
                 }
               } catch (error) {
                 console.warn(`Failed to fetch on-chain details for coin ${basicTokenInfo.id} on Base Sepolia:`, error);
                 enrichedTokens.push(basicTokenInfo); 
               }
             }
-            setUserTokens(enrichedTokens.sort((a,b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0) )); // Sort by Firestore createdAt
+            setUserTokens(enrichedTokens.sort((a,b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0) ));
           } else {
             throw new Error(tokensData.message || 'Failed to fetch tokens from API');
           }
@@ -90,7 +89,7 @@ export default function DashboardPage() {
               startTime: new Date(b.startTime),
               endTime: new Date(b.endTime),
             }));
-            setUserBookings(bookingsWithDates);
+            setUserBookings(bookingsWithDates.sort((a, b) => b.startTime.getTime() - a.startTime.getTime()));
           } else {
             throw new Error(bookingsData.message || 'Failed to fetch bookings');
           }
@@ -101,11 +100,9 @@ export default function DashboardPage() {
         } finally {
           setIsLoadingBookings(false);
         }
-        setIsLoading(false);
       } else if (!isConnected) {
         setUserTokens([]);
         setUserBookings([]);
-        setIsLoading(false);
         setIsLoadingTokens(false);
         setIsLoadingBookings(false);
       }
@@ -113,6 +110,7 @@ export default function DashboardPage() {
     fetchDashboardData();
   }, [isConnected, address, toast]);
 
+  const isLoading = isLoadingTokens || isLoadingBookings;
 
   if (isLoading && isConnected) { 
     return (
@@ -151,8 +149,8 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 shadow-lg">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Zap className="h-6 w-6 text-primary" /> My Zora Time Tokens (Base Sepolia)</CardTitle>
-            <CardDescription>View and manage your minted Zora time tokens. (Data from Firestore & Zora SDK on Base Sepolia)</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Zap className="h-6 w-6 text-primary" /> My Zora Time Tokens</CardTitle>
+            <CardDescription>View and manage your minted Zora time tokens on Base Sepolia.</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoadingTokens ? (
@@ -166,16 +164,14 @@ export default function DashboardPage() {
                   <li key={token.id} className="p-4 border rounded-lg bg-background hover:bg-muted/30 transition-colors">
                     <div className="flex justify-between items-start">
                       <div className="flex items-start gap-4">
-                        {token.imageUrl ? (
-                           <Image src={token.imageUrl} alt={token.name} width={64} height={64} className="rounded-md aspect-square object-cover" data-ai-hint="token icon" />
-                        ) : ( 
-                          <div className="w-16 h-16 bg-muted rounded-md flex items-center justify-center text-primary text-2xl font-bold">
-                            {token.symbol ? token.symbol.charAt(0).toUpperCase() : '?'}
-                          </div>
-                        )}
+                        <div className="relative w-16 h-16 shrink-0">
+                          <Image src={token.imageUrl || `https://placehold.co/128x128.png`} alt={token.name} layout="fill" className="rounded-md aspect-square object-cover" data-ai-hint="token icon" />
+                        </div>
                         <div>
                           <h3 className="font-semibold text-lg">{token.name} ({token.symbol})</h3>
-                          <p className="text-sm text-muted-foreground">Contract: {`${token.id.slice(0,10)}...${token.id.slice(-8)}`}</p>
+                          <p className="text-sm text-muted-foreground truncate max-w-xs">
+                            Contract: <Link href={`https://sepolia.basescan.org/address/${token.id}`} target="_blank" className="text-accent hover:underline">{`${token.id.slice(0,10)}...${token.id.slice(-8)}`}</Link>
+                          </p>
                           {token.totalSupply && <p className="text-sm text-muted-foreground">Total Supply: {token.totalSupply}</p>}
                            {token.uri && (
                             <p className="text-sm text-muted-foreground truncate max-w-xs">
@@ -197,11 +193,12 @@ export default function DashboardPage() {
                 ))}
               </ul>
             ) : (
-              <div className="text-center py-8">
+              <div className="text-center py-8 rounded-lg border-2 border-dashed">
                 <Image src="https://placehold.co/300x200.png" data-ai-hint="empty state tokens" alt="No tokens" width={300} height={200} className="mx-auto mb-4 rounded-md opacity-50" />
-                <p className="text-muted-foreground">You haven't minted any Zora tokens on Base Sepolia yet, or none were found in Firestore.</p>
-                <Button variant="link" asChild className="text-primary hover:text-accent">
-                  <Link href="/mint">Mint your first token</Link>
+                <h3 className="text-xl font-semibold">No Tokens Minted Yet</h3>
+                <p className="text-muted-foreground mt-2 mb-4">It looks like you're just getting started. Mint your first token to represent your time!</p>
+                <Button asChild>
+                  <Link href="/mint"><PlusCircle className="mr-2 h-4 w-4" />Mint Your First Token</Link>
                 </Button>
               </div>
             )}
@@ -228,8 +225,8 @@ export default function DashboardPage() {
 
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><ListChecks className="h-6 w-6 text-primary" /> My Bookings</CardTitle>
-          <CardDescription>View and manage upcoming and past bookings. (Data from Firestore)</CardDescription>
+          <CardTitle className="flex items-center gap-2"><ListChecks className="h-6 w-6 text-primary" /> My Recent Bookings</CardTitle>
+          <CardDescription>A quick look at your 5 most recent bookings.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoadingBookings ? (
@@ -238,44 +235,43 @@ export default function DashboardPage() {
               <p className="ml-2 text-muted-foreground">Loading bookings...</p>
             </div>
           ) : userBookings.length > 0 ? (
-            <ul className="space-y-4">
-              {userBookings.map(booking => (
-                <li key={booking.id} className="p-4 border rounded-lg bg-background hover:bg-muted/30 transition-colors">
+            <ul className="space-y-3">
+              {userBookings.slice(0, 5).map(booking => (
+                <li key={booking.id} className="p-3 border rounded-lg bg-background hover:bg-muted/30 transition-colors">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
                     <div>
                       <h3 className="font-semibold">Booking with {`${booking.clientId.slice(0,6)}...${booking.clientId.slice(-4)}`}</h3>
                       <p className="text-sm text-muted-foreground">
-                        {booking.startTime.toLocaleString()} - {booking.endTime.toLocaleTimeString()}
+                        {format(booking.startTime, "MMM d, yyyy, h:mm a")}
                       </p>
-                      <p className="text-sm text-muted-foreground">Token ID: <Link href={`https://sepolia.basescan.org/token/${booking.tokenId}`} target="_blank" className="text-accent hover:underline">{`${booking.tokenId.slice(0,10)}...`}</Link></p>
                     </div>
-                    <div className="mt-2 sm:mt-0">
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        booking.status === 'confirmed' ? 'bg-green-500/20 text-green-400' :
-                        booking.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
-                        'bg-red-500/20 text-red-400'
-                      }`}>
+                    <div className="mt-2 sm:mt-0 flex items-center gap-4">
+                       <p className="text-sm text-muted-foreground hidden md:block truncate max-w-[200px]" title={booking.tokenId}>Token: <Link href={`https://sepolia.basescan.org/token/${booking.tokenId}`} target="_blank" className="text-accent hover:underline">{`${booking.tokenId.slice(0,10)}...`}</Link></p>
+                      <Badge variant={booking.status === 'confirmed' ? 'default' : 'destructive'} className={booking.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : ''}>
                         {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                      </span>
+                      </Badge>
                     </div>
                   </div>
                 </li>
               ))}
             </ul>
           ) : (
-             <div className="text-center py-8">
+             <div className="text-center py-12 rounded-lg border-2 border-dashed">
                 <Image src="https://placehold.co/300x200.png" data-ai-hint="empty state bookings" alt="No bookings" width={300} height={200} className="mx-auto mb-4 rounded-md opacity-50" />
-                <p className="text-muted-foreground">No bookings found in Firestore.</p>
+                <h3 className="text-xl font-semibold">No Bookings Found</h3>
+                <p className="text-muted-foreground mt-2">When someone books a session with you, it will appear here.</p>
               </div>
           )}
         </CardContent>
-        <CardFooter>
+        {userBookings.length > 0 && (
+          <CardFooter>
             <Button variant="outline" className="w-full sm:w-auto" asChild>
               <Link href="/dashboard/bookings">
                 Manage All Bookings <ExternalLink className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-        </CardFooter>
+          </CardFooter>
+        )}
       </Card>
     </div>
   );

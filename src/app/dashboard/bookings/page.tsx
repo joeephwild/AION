@@ -35,7 +35,7 @@ const BookingCard = ({ booking, perspective, profile, onCancel, isCancelling }: 
   };
 
   return (
-    <Card className="bg-card/70 backdrop-blur-sm shadow-md hover:shadow-lg transition-shadow">
+    <Card className="bg-card/70 backdrop-blur-sm shadow-md hover:shadow-lg transition-shadow flex flex-col">
       <CardHeader>
         <div className="flex justify-between items-start">
           <div>
@@ -55,7 +55,7 @@ const BookingCard = ({ booking, perspective, profile, onCancel, isCancelling }: 
           </Badge>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-grow">
         <div className="text-sm space-y-2">
           <p><strong>Date:</strong> {format(booking.startTime, "EEEE, MMMM d, yyyy")}</p>
           <p><strong>Time:</strong> {format(booking.startTime, "p")} - {format(booking.endTime, "p")}</p>
@@ -129,7 +129,7 @@ export default function BookingsPage() {
 
   useEffect(() => {
     const fetchProfiles = async (ids: string[]) => {
-      const uniqueIds = [...new Set(ids)].filter(id => !profiles[id]);
+      const uniqueIds = [...new Set(ids)].filter(id => !profiles[id] && id);
       if (uniqueIds.length === 0) return;
 
       setIsLoadingProfiles(true);
@@ -185,16 +185,6 @@ export default function BookingsPage() {
     }
   };
 
-  const { upcomingHosted, pastHosted } = useMemo(() => ({
-    upcomingHosted: hostedBookings.filter(b => new Date() < b.endTime),
-    pastHosted: hostedBookings.filter(b => new Date() >= b.endTime),
-  }), [hostedBookings]);
-
-  const { upcomingClient, pastClient } = useMemo(() => ({
-    upcomingClient: clientBookings.filter(b => new Date() < b.endTime),
-    pastClient: clientBookings.filter(b => new Date() >= b.endTime),
-  }), [clientBookings]);
-
   if (!address) {
     return (
        <Card className="w-full max-w-md mx-auto mt-10 p-8 shadow-xl">
@@ -240,6 +230,7 @@ export default function BookingsPage() {
             profiles={profiles}
             onCancel={handleCancelBooking}
             isCancellingId={isCancelling}
+            userId={address}
           />
         </TabsContent>
         <TabsContent value="booked" className="mt-6">
@@ -249,6 +240,7 @@ export default function BookingsPage() {
             profiles={profiles}
             onCancel={handleCancelBooking}
             isCancellingId={isCancelling}
+            userId={address}
           />
         </TabsContent>
       </Tabs>
@@ -257,12 +249,13 @@ export default function BookingsPage() {
 }
 
 
-function BookingList({ bookings, perspective, profiles, onCancel, isCancellingId }: {
+function BookingList({ bookings, perspective, profiles, onCancel, isCancellingId, userId }: {
   bookings: Booking[];
   perspective: 'creator' | 'client';
   profiles: Record<string, CreatorPublicProfile>;
   onCancel: (bookingId: string) => void;
   isCancellingId: string | null;
+  userId: string;
 }) {
 
   const { upcoming, past } = useMemo(() => ({
@@ -272,13 +265,26 @@ function BookingList({ bookings, perspective, profiles, onCancel, isCancellingId
   
   if (bookings.length === 0) {
     return (
-      <Alert>
-        <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>No Bookings Found</AlertTitle>
-        <AlertDescription>
-          You have no {perspective === 'creator' ? 'hosted' : 'booked'} sessions.
-        </AlertDescription>
-      </Alert>
+      <Card className="mt-6 text-center py-12 shadow-md">
+        <CardHeader>
+            <ListChecks className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <CardTitle>No Bookings Found</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <p className="text-muted-foreground">
+                You have no {perspective === 'creator' ? 'hosted' : 'booked'} sessions yet.
+            </p>
+            {perspective === 'creator' ? (
+                <Button asChild variant="default" className="mt-4">
+                    <Link href={`/book/${userId}`}>View Your Public Booking Page</Link>
+                </Button>
+            ) : (
+                 <Button asChild variant="default" className="mt-4">
+                    <Link href="/explore">Explore Creators</Link>
+                </Button>
+            )}
+        </CardContent>
+      </Card>
     );
   }
 
@@ -299,7 +305,12 @@ function BookingList({ bookings, perspective, profiles, onCancel, isCancellingId
               />
             ))}
           </div>
-        ) : <p className="text-muted-foreground">No upcoming sessions.</p>}
+        ) : (
+          <div className="text-center py-10 text-muted-foreground rounded-lg border border-dashed">
+            <CalendarX2 className="h-8 w-8 mx-auto mb-2" />
+            <p>No upcoming sessions.</p>
+          </div>
+        )}
       </div>
 
        <div>
@@ -317,7 +328,12 @@ function BookingList({ bookings, perspective, profiles, onCancel, isCancellingId
               />
             ))}
           </div>
-        ) : <p className="text-muted-foreground">No past sessions.</p>}
+        ) : (
+          <div className="text-center py-10 text-muted-foreground rounded-lg border border-dashed">
+            <CalendarX2 className="h-8 w-8 mx-auto mb-2" />
+            <p>No past sessions.</p>
+          </div>
+        )}
       </div>
     </div>
   );

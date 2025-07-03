@@ -14,7 +14,7 @@ import { UserCircle, Save, Loader2, AlertTriangle, UploadCloud, Image as ImageIc
 import { useState, useEffect, useRef } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import type { CreatorProfileData } from "@/types";
-import { storage } from "@/lib/firebase"; // Import Firebase storage
+import { storage } from "@/lib/firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import Image from "next/image";
 
@@ -25,6 +25,10 @@ const profileFormSchema = z.object({
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
+
+const MAX_FILE_SIZE_MB = 2;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 export default function ProfilePage() {
   const account = useActiveAccount();
@@ -61,7 +65,7 @@ export default function ProfilePage() {
               avatarUrl: data.profile.avatarUrl || "",
             });
             if (data.profile.avatarUrl) {
-              setImagePreview(data.profile.avatarUrl); // Show current avatar
+              setImagePreview(data.profile.avatarUrl);
             }
           } else if (!data.success) {
              toast({ title: "Error", description: data.message || "Could not load profile.", variant: "destructive" });
@@ -73,7 +77,7 @@ export default function ProfilePage() {
           setIsLoading(false);
         }
       } else {
-        setIsLoading(false); // Not connected
+        setIsLoading(false);
       }
     }
     fetchProfile();
@@ -82,6 +86,14 @@ export default function ProfilePage() {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+        toast({ title: "Invalid File Type", description: "Please select a PNG, JPG, GIF, or WEBP image.", variant: "destructive" });
+        return;
+      }
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        toast({ title: "File Too Large", description: `The file must be smaller than ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
+        return;
+      }
       setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -92,7 +104,6 @@ export default function ProfilePage() {
   };
   
   useEffect(() => {
-    // Clean up object URL from file preview
     return () => {
       if (imagePreview && imagePreview.startsWith("blob:")) {
         URL.revokeObjectURL(imagePreview);
@@ -114,13 +125,12 @@ export default function ProfilePage() {
     if (selectedFile) {
       setSavingStep("Uploading avatar...");
       try {
-        // Create a unique path for the avatar in Firebase Storage
         const filePath = `avatars/${address}/${Date.now()}_${selectedFile.name}`;
         const fileStorageRef = storageRef(storage, filePath);
         
         await uploadBytes(fileStorageRef, selectedFile);
         finalAvatarUrl = await getDownloadURL(fileStorageRef);
-        form.setValue('avatarUrl', finalAvatarUrl); // Update form value with the new URL
+        form.setValue('avatarUrl', finalAvatarUrl);
         toast({ title: "Avatar Uploaded", description: "Your new avatar has been uploaded."});
       } catch (uploadError) {
         console.error("Avatar upload error:", uploadError);
@@ -132,7 +142,6 @@ export default function ProfilePage() {
     }
     
     setSavingStep("Saving profile data...");
-    // Prepare data for API, ensuring avatarUrl is the potentially updated one
     const dataToSave: ProfileFormValues = {
         ...values,
         avatarUrl: finalAvatarUrl,
@@ -148,10 +157,10 @@ export default function ProfilePage() {
       if (result.success) {
         toast({ title: "Profile Saved!", description: "Your profile has been updated." });
         if (result.profile) {
-            form.reset(result.profile); // Reset form with data from server
-            setImagePreview(result.profile.avatarUrl || null); // Update preview to new or cleared avatar
+            form.reset(result.profile);
+            setImagePreview(result.profile.avatarUrl || null);
         }
-        setSelectedFile(null); // Clear selected file after successful save
+        setSelectedFile(null);
       } else {
         throw new Error(result.message || "Failed to save profile.");
       }
@@ -235,37 +244,41 @@ export default function ProfilePage() {
               <FormItem>
                 <FormLabel>Avatar Image</FormLabel>
                 <FormControl>
-                  <div className="space-y-3">
-                    <div className="w-32 h-32 relative rounded-full overflow-hidden border-2 border-dashed border-muted-foreground/50 flex items-center justify-center bg-muted/20">
+                  <div className="flex items-center gap-4">
+                    <div className="w-24 h-24 relative rounded-full overflow-hidden border-2 border-dashed border-muted-foreground/50 flex items-center justify-center bg-muted/20">
                       {imagePreview ? (
                         <Image src={imagePreview} alt="Avatar preview" layout="fill" objectFit="cover" />
                       ) : (
-                        <ImageIcon className="h-12 w-12 text-muted-foreground/70" />
+                        <ImageIcon className="h-10 w-10 text-muted-foreground/70" />
                       )}
                     </div>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isSaving}
-                      className="w-full sm:w-auto"
-                    >
-                      <UploadCloud className="mr-2 h-4 w-4" />
-                      {selectedFile ? "Change Image" : "Upload Image"}
-                    </Button>
-                    <Input 
-                      type="file" 
-                      ref={fileInputRef}
-                      onChange={handleFileChange} 
-                      className="hidden" 
-                      accept="image/png, image/jpeg, image/gif, image/webp"
-                      disabled={isSaving}
-                    />
-                     {selectedFile && <p className="text-xs text-muted-foreground">Selected: {selectedFile.name}</p>}
-                     {!selectedFile && form.getValues("avatarUrl") && <p className="text-xs text-muted-foreground">Current avatar is set via URL.</p>}
+                    <div className="flex flex-col gap-2">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isSaving}
+                        className="w-full sm:w-auto"
+                      >
+                        <UploadCloud className="mr-2 h-4 w-4" />
+                        {selectedFile ? "Change Image" : "Upload Image"}
+                      </Button>
+                      <Input 
+                        type="file" 
+                        ref={fileInputRef}
+                        onChange={handleFileChange} 
+                        className="hidden" 
+                        accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                        disabled={isSaving}
+                      />
+                      {selectedFile ? (
+                        <p className="text-xs text-muted-foreground">Selected: {selectedFile.name}</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Max {MAX_FILE_SIZE_MB}MB. PNG, JPG, GIF, WEBP.</p>
+                      )}
+                    </div>
                   </div>
                 </FormControl>
-                <FormDescription>Upload a PNG, JPG, GIF, or WEBP file. Max 2MB recommended.</FormDescription>
                 <FormMessage>{form.formState.errors.avatarUrl?.message}</FormMessage>
               </FormItem>
 
