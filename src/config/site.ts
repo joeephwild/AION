@@ -30,6 +30,10 @@ export const siteConfig: SiteConfig = {
       title: "Dashboard",
       href: "/dashboard",
     },
+     {
+      title: "My Bookings",
+      href: "/dashboard/bookings",
+    },
     {
       title: "My Profile",
       href: "/dashboard/profile",

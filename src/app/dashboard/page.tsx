@@ -270,8 +270,10 @@ export default function DashboardPage() {
           )}
         </CardContent>
         <CardFooter>
-            <Button variant="outline" className="w-full sm:w-auto">
-                View All Bookings <ExternalLink className="ml-2 h-4 w-4" />
+            <Button variant="outline" className="w-full sm:w-auto" asChild>
+              <Link href="/dashboard/bookings">
+                Manage All Bookings <ExternalLink className="ml-2 h-4 w-4" />
+              </Link>
             </Button>
         </CardFooter>
       </Card>

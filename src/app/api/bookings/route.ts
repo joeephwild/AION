@@ -6,19 +6,26 @@ import { db } from '@/lib/firebase';
 import { collection, addDoc, getDocs, query, where, Timestamp, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import type { Booking } from '@/types';
 
-// GET /api/bookings?creatorId=...
+// GET /api/bookings?creatorId=... or ?clientId=...
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const creatorId = searchParams.get('creatorId');
-  // const clientId = searchParams.get('clientId'); // Future: If we need to fetch by client
+  const clientId = searchParams.get('clientId');
 
-  if (!creatorId) {
-    return NextResponse.json({ success: false, message: 'creatorId is required' }, { status: 400 });
+  if (!creatorId && !clientId) {
+    return NextResponse.json({ success: false, message: 'creatorId or clientId is required' }, { status: 400 });
   }
 
   try {
     const bookingsRef = collection(db, 'bookings');
-    const q = query(bookingsRef, where('creatorId', '==', creatorId));
+    let q: any;
+
+    if (creatorId) {
+      q = query(bookingsRef, where('creatorId', '==', creatorId));
+    } else { // clientId must be present due to the check above
+      q = query(bookingsRef, where('clientId', '==', clientId));
+    }
+
     const querySnapshot = await getDocs(q);
 
     const fetchedBookings: Booking[] = [];
@@ -29,7 +36,6 @@ export async function GET(request: NextRequest) {
         creatorId: data.creatorId,
         clientId: data.clientId,
         tokenId: data.tokenId,
-        // Convert Firestore Timestamps to JS Date objects
         startTime: (data.startTime as Timestamp).toDate(),
         endTime: (data.endTime as Timestamp).toDate(),
         status: data.status,
@@ -62,7 +68,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'Missing required booking fields' }, { status: 400 });
     }
 
-    // Convert ISO string dates from client to Firestore Timestamps
     const startTimeDate = new Date(startTime);
     const endTimeDate = new Date(endTime);
 
@@ -76,21 +81,20 @@ export async function POST(request: NextRequest) {
       tokenId,
       startTime: Timestamp.fromDate(startTimeDate),
       endTime: Timestamp.fromDate(endTimeDate),
-      status: 'confirmed' as Booking['status'], // Default to confirmed
-      createdAt: serverTimestamp(), // Optional: for auditing or sorting by creation time
+      status: 'confirmed' as Booking['status'],
+      createdAt: serverTimestamp(),
     };
 
     const bookingsRef = collection(db, 'bookings');
     const docRef = await addDoc(bookingsRef, newBookingData);
 
-    // To return the full booking object including the ID and converted dates:
     const createdBooking: Booking = {
         id: docRef.id,
         creatorId: newBookingData.creatorId,
         clientId: newBookingData.clientId,
         tokenId: newBookingData.tokenId,
-        startTime: startTimeDate, // Return as JS Date
-        endTime: endTimeDate,     // Return as JS Date
+        startTime: startTimeDate,
+        endTime: endTimeDate,
         status: newBookingData.status,
     };
 
