@@ -27,10 +27,18 @@ export const siteConfig: SiteConfig = {
   },
   mainNav: [
     {
+      title: "Explore",
+      href: "/explore",
+    },
+    {
       title: "Dashboard",
       href: "/dashboard",
     },
-     {
+    {
+      title: "Analytics",
+      href: "/dashboard/analytics",
+    },
+    {
       title: "My Bookings",
       href: "/dashboard/bookings",
     },
@@ -42,10 +50,5 @@ export const siteConfig: SiteConfig = {
       title: "Mint Token",
       href: "/mint",
     },
-    // Example for a discover page if added later
-    // {
-    //   title: "Explore Creators",
-    //   href: "/explore",
-    // },
   ],
 };
