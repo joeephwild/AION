@@ -58,4 +58,11 @@ export type AvailabilitySettings = {
   minNoticeTime: number; // hours
 };
 
-
+export type GoogleApiTokens = {
+  access_token: string;
+  refresh_token: string;
+  scope: string;
+  token_type: 'Bearer';
+  expiry_date: number;
+  id_token?: string;
+};

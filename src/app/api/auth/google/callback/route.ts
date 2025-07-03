@@ -2,52 +2,83 @@
 // /src/app/api/auth/google/callback/route.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { getGoogleOAuth2Client } from '@/lib/google-calendar-server';
+import { db } from '@/lib/firebase';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { google } from 'googleapis';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
-  const state = searchParams.get('state');
+  const state = searchParams.get('state'); // Should contain our userId
   const error = searchParams.get('error');
 
   if (error) {
     console.error('Google OAuth Error:', error);
-    // Redirect to an error page or dashboard with an error message
-    return NextResponse.redirect(new URL('/dashboard?error=google_oauth_failed', request.url));
+    return NextResponse.redirect(new URL('/dashboard/availability?error=google_oauth_failed', request.url));
   }
 
-  if (code) {
-    console.log('Google OAuth Code:', code);
-    console.log('Google OAuth State:', state);
+  if (!code) {
+    console.error('Google OAuth Error: No code received.');
+    return NextResponse.redirect(new URL('/dashboard/availability?error=google_oauth_incomplete', request.url));
+  }
+  
+  if (!state) {
+    console.error('Google OAuth Error: No state (userId) received.');
+    return NextResponse.redirect(new URL('/dashboard/availability?error=google_oauth_nostate', request.url));
+  }
 
-    // **IMPORTANT: SERVER-SIDE TOKEN EXCHANGE REQUIRED HERE**
-    // In a production app, you would now exchange this 'code' for an access token
-    // and refresh token by making a POST request to Google's token endpoint.
-    // This MUST be done server-side to protect your client_secret.
-    // e.g., using fetch to 'https://oauth2.googleapis.com/token'
-    //
-    // const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    //   body: new URLSearchParams({
-    //     code: code,
-    //     client_id: process.env.GOOGLE_CLIENT_ID!, // Server-side env var
-    //     client_secret: process.env.GOOGLE_CLIENT_SECRET!, // Server-side env var
-    //     redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google/callback`, // Must match console
-    //     grant_type: 'authorization_code',
-    //   }),
-    // });
-    // const tokens = await tokenResponse.json();
-    //
-    // // Securely store tokens.access_token and tokens.refresh_token for the user.
-    // // For this prototype, we are not implementing the full token exchange.
+  const userId = state; // The user's wallet address
 
-    // For prototyping, we'll assume the client-side got the token or will handle it.
-    // Redirect to the dashboard or availability page, possibly with a success flag.
-    // The client-side JavaScript that initiated the OAuth flow will pick up from here.
-    // This simple redirect is often enough for client-side gapi flows that handle tokens themselves.
+  try {
+    const oauth2Client = getGoogleOAuth2Client();
+    const { tokens } = await oauth2Client.getToken(code);
+    
+    if (!tokens.refresh_token) {
+        // This can happen if the user has already granted consent and we didn't use prompt: 'consent'
+        // In this case, we should try to retrieve the existing refresh token from Firestore.
+        // For simplicity here, we'll log a warning. For production, you'd handle this more gracefully.
+        console.warn(`Google OAuth: No refresh_token received for user ${userId}. This may happen on re-authentication without 'prompt: consent'.`);
+    }
+
+    // Get user's primary email address to display in the UI
+    oauth2Client.setCredentials(tokens);
+    const people = google.people({ version: 'v1', auth: oauth2Client });
+    const profile = await people.people.get({
+        resourceName: 'people/me',
+        personFields: 'emailAddresses',
+    });
+    const userEmail = profile.data.emailAddresses?.[0]?.value || 'N/A';
+    
+    // Securely store the tokens in Firestore under the user's document
+    const userDocRef = doc(db, 'users', userId);
+
+    const dataToStore: Record<string, any> = {
+        googleTokens: tokens,
+        calendarConnections: { 
+            google: {
+                connected: true,
+                email: userEmail,
+            }
+        },
+    };
+
+    // If no new refresh token is provided, merge with existing data to preserve old one.
+    if (!tokens.refresh_token) {
+        const existingDoc = await getDoc(userDocRef);
+        const existingTokens = existingDoc.data()?.googleTokens;
+        if (existingTokens?.refresh_token) {
+            dataToStore.googleTokens.refresh_token = existingTokens.refresh_token;
+        }
+    }
+
+    await setDoc(userDocRef, dataToStore, { merge: true });
+
+    // Redirect user back to the availability page with a success message
     return NextResponse.redirect(new URL('/dashboard/availability?google_auth=success', request.url));
-  }
 
-  // If no code and no error, something unexpected happened.
-  return NextResponse.redirect(new URL('/dashboard?error=google_oauth_incomplete', request.url));
+  } catch (err) {
+    console.error('Failed to exchange auth code or save tokens:', err);
+    return NextResponse.redirect(new URL('/dashboard/availability?error=token_exchange_failed', request.url));
+  }
 }

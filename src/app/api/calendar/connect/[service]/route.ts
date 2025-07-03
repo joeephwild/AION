@@ -3,18 +3,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { getGoogleOAuth2Client } from '@/lib/google-calendar-server';
 
-type CalendarConnections = {
-  google?: boolean;
-  outlook?: boolean;
-};
-
-// GET /api/calendar/connect/status
-// Note: The [service] param is not used here, this endpoint is for overall status
-export async function GET(
-  request: NextRequest
-) {
+// GET /api/calendar/connect/status - this is now the one source of truth for connection status
+export async function GET(request: NextRequest) {
   const userId = request.headers.get('x-user-id');
 
   if (!userId) {
@@ -25,19 +18,25 @@ export async function GET(
     const userDocRef = doc(db, 'users', userId);
     const userDocSnap = await getDoc(userDocRef);
 
-    let connections: CalendarConnections = { google: false, outlook: false }; // Default
+    let connections = { 
+      google: { connected: false, email: null }, 
+      outlook: { connected: false, email: null } 
+    };
 
     if (userDocSnap.exists()) {
       const userData = userDocSnap.data();
-      if (userData.calendarConnections) {
-        connections = userData.calendarConnections;
+      // Check for Google tokens to determine connection status
+      if (userData.googleTokens && userData.googleTokens.access_token) {
+        connections.google.connected = true;
+        connections.google.email = userData.calendarConnections?.google?.email || null;
+      }
+      // Check for Outlook (retains mock logic)
+      if (userData.calendarConnections?.outlook?.connected) {
+        connections.outlook.connected = true;
       }
     }
     
-    return NextResponse.json({
-      success: true,
-      connections,
-    });
+    return NextResponse.json({ success: true, connections });
 
   } catch (error) {
     console.error('Failed to fetch calendar connection status from Firestore:', error);
@@ -46,7 +45,7 @@ export async function GET(
   }
 }
 
-
+// POST /api/calendar/connect/google - Initiates the Google OAuth flow by returning an auth URL
 export async function POST(
   request: NextRequest,
   { params }: { params: { service: string } }
@@ -57,38 +56,59 @@ export async function POST(
   if (!userId) {
     return NextResponse.json({ success: false, message: 'x-user-id header is required' }, { status: 400 });
   }
-  if (service !== 'google' && service !== 'outlook') {
-    return NextResponse.json({ success: false, message: 'Invalid service provider.' }, { status: 400 });
+  
+  if (service !== 'google') {
+    return NextResponse.json({ success: false, message: 'This endpoint currently only supports initiating Google connection.' }, { status: 400 });
   }
 
   try {
-    const { connect } = await request.json(); // Expecting 'connect: true/false'
-    
-    if (typeof connect !== 'boolean') {
-      return NextResponse.json({ success: false, message: 'Invalid payload: connect must be a boolean.' }, { status: 400 });
-    }
-
-    const userDocRef = doc(db, 'users', userId);
-
-    // Prepare the update object using dot notation for nested fields
-    const updateData: Record<string, any> = {};
-    updateData[`calendarConnections.${service}`] = connect;
-
-    // Use setDoc with merge: true to ensure the document and calendarConnections field are created if they don't exist
-    // Then updateDoc can be used if you are sure calendarConnections object exists.
-    // For simplicity and robustness against missing fields/docs, setDoc with merge is often easier.
-    await setDoc(userDocRef, { calendarConnections: { [service]: connect } }, { merge: true });
-    
-    return NextResponse.json({
-      success: true,
-      message: `Connection to ${service} ${connect ? 'established' : 'disconnected'}. Status updated in Firestore.`,
-      service: service,
-      connected: connect,
+    const oauth2Client = getGoogleOAuth2Client();
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline', // Important to get a refresh token
+      prompt: 'consent', // Important to ensure refresh token is always sent
+      scope: [
+        'https://www.googleapis.com/auth/calendar.readonly',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ],
+      state: userId, // Pass the user's ID to identify them in the callback
     });
+    
+    return NextResponse.json({ success: true, authUrl });
 
   } catch (error) {
-    console.error(`Failed to update ${service} connection status in Firestore:`, error);
+    console.error(`Failed to generate Google auth URL:`, error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    return NextResponse.json({ success: false, message: 'Failed to update connection status', error: errorMessage }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'Failed to generate auth URL', error: errorMessage }, { status: 500 });
   }
+}
+
+// DELETE /api/calendar/connect/google - Disconnects Google Calendar by removing tokens
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { service: string } }
+) {
+    const service = params.service;
+    const userId = request.headers.get('x-user-id');
+
+    if (!userId) {
+        return NextResponse.json({ success: false, message: 'x-user-id header is required' }, { status: 400 });
+    }
+     if (service !== 'google') {
+        return NextResponse.json({ success: false, message: 'This endpoint only supports disconnecting Google.' }, { status: 400 });
+    }
+
+    try {
+        const userDocRef = doc(db, 'users', userId);
+        // Remove the googleTokens and the connection status field from Firestore
+        await updateDoc(userDocRef, {
+            'googleTokens': null, // Or FieldValue.delete()
+            'calendarConnections.google': null // Or FieldValue.delete()
+        });
+
+        return NextResponse.json({ success: true, message: 'Successfully disconnected from Google Calendar.' });
+    } catch (error) {
+        console.error('Failed to disconnect Google Calendar:', error);
+        const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+        return NextResponse.json({ success: false, message: 'Failed to disconnect', error: errorMessage }, { status: 500 });
+    }
 }

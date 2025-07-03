@@ -2,28 +2,25 @@
 // /src/app/api/calendar/events/route.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { db } from '@/lib/firebase'; // Import Firestore instance
+import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import type { CalendarEvent } from '@/types';
+import { getGoogleCalendarEvents } from '@/lib/google-calendar-server';
+import type { Credentials } from 'google-auth-library';
 
-// Mock function to generate events if a calendar is connected
-function getMockCalendarEvents(serviceName: string): CalendarEvent[] {
+// Mock function to generate events for a "connected" Outlook calendar
+function getMockOutlookEvents(): CalendarEvent[] {
   const today = new Date();
   return [
     {
-      title: `Meeting via ${serviceName}`,
-      start: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, 10, 0),
-      end: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, 11, 0),
+      title: 'Project Deadline (Outlook Mock)',
+      start: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2, 17, 0),
+      end: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2, 17, 30),
     },
     {
-      title: `Dentist Appointment (${serviceName})`,
-      start: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 3, 14, 30),
-      end: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 3, 15, 30),
-    },
-    {
-      title: `Project Sync (${serviceName})`,
-      start: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 5, 9, 0),
-      end: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 5, 9, 45),
+      title: 'Team Sync (Outlook Mock)',
+      start: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 4, 11, 0),
+      end: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 4, 12, 0),
     },
   ];
 }
@@ -45,27 +42,30 @@ export async function GET(request: NextRequest) {
     if (userDocSnap.exists()) {
       const userData = userDocSnap.data();
       if (userData && userData.calendarConnections) {
-        if (userData.calendarConnections.google) {
-          // In a real app, call Google Calendar API here using stored tokens
-          // For now, we keep the mock generation logic
-          // This part will be replaced when actual Google API calls are made server-side
-          // console.log("Mocking Google events as it's connected in Firestore for user:", creatorId);
-          // events = events.concat(getMockCalendarEvents('Google'));
-          // Client-side fetch for google events is handled in AvailabilityPage for now.
-          // This endpoint primarily serves mock outlook events or could serve merged server-side events in future.
+        
+        // Fetch live Google Calendar events if tokens exist
+        if (userData.googleTokens && userData.googleTokens.access_token) {
+          try {
+            const googleEvents = await getGoogleCalendarEvents(userData.googleTokens as Credentials);
+            events = events.concat(googleEvents);
+          } catch (e) {
+            console.error(`Failed to fetch Google events for user ${creatorId}:`, e);
+            // Don't fail the whole request, just skip Google events
+          }
         }
-        if (userData.calendarConnections.outlook) {
-          // In a real app, call Outlook Calendar API here
-          events = events.concat(getMockCalendarEvents('Outlook (Mocked via Firestore status)'));
+
+        // Fetch mock Outlook events if connected
+        if (userData.calendarConnections.outlook?.connected) {
+          events = events.concat(getMockOutlookEvents());
         }
       }
     }
-    // Sort events by start time
+    // Sort all combined events by start time
     events.sort((a, b) => a.start.getTime() - b.start.getTime());
 
     return NextResponse.json({ success: true, events });
   } catch (error) {
-    console.error('Failed to fetch calendar events status from Firestore:', error);
+    console.error('Failed to fetch calendar events from Firestore/Google:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     return NextResponse.json({ success: false, message: 'Failed to fetch calendar events', error: errorMessage }, { status: 500 });
   }
