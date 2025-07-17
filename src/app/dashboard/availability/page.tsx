@@ -47,23 +47,6 @@ export default function AvailabilityPage() {
   const [outlookCalendarEvents, setOutlookCalendarEvents] = useState<CalendarEvent[]>([]);
   const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(false);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
-
-  // Listener for Google Sign-in state changes
-  useEffect(() => {
-    const handleSignInChange = (signedIn: boolean) => {
-      setIsGoogleSignedIn(signedIn);
-    };
-    // Set initial state
-    setIsGoogleSignedIn(apiCalendar.sign);
-    // Subscribe to changes
-    apiCalendar.on('sign-in-status-change', handleSignInChange);
-
-    return () => {
-      // It's good practice to have a way to remove the listener,
-      // though react-google-calendar-api doesn't provide a direct method.
-      // This is a simplified cleanup.
-    };
-  }, []);
   
   // Fetch creator's own availability settings
   useEffect(() => {
@@ -115,12 +98,23 @@ export default function AvailabilityPage() {
           console.error('Error fetching Google Calendar events:', error);
           toast({ title: "Error", description: "Could not fetch Google Calendar events.", variant: "destructive" });
           setGoogleCalendarEvents([]);
+      } finally {
+        setIsLoadingEvents(false);
       }
   }, [isGoogleSignedIn, toast]);
 
   useEffect(() => {
+    // Set initial sign-in state on component mount
+    if (typeof window !== 'undefined' && window.gapi) {
+        setIsGoogleSignedIn(apiCalendar.sign);
+    }
+  }, []);
+
+  useEffect(() => {
+    if(isGoogleSignedIn){
       fetchGoogleCalendarEvents();
-  }, [fetchGoogleCalendarEvents]);
+    }
+  }, [isGoogleSignedIn, fetchGoogleCalendarEvents]);
 
   // Fetch mock Outlook events from our backend API
   useEffect(() => {
@@ -146,7 +140,10 @@ export default function AvailabilityPage() {
             setIsLoadingEvents(false);
         }
     }
-    fetchOutlookEvents();
+    // Only fetch if connected, as this endpoint doesn't require a creatorId
+    if (isConnected) {
+      fetchOutlookEvents();
+    }
   }, [isConnected]);
 
   const handleWorkingHourChange = (day: string, field: keyof WorkingHour, value: string | boolean) => {
@@ -310,7 +307,7 @@ export default function AvailabilityPage() {
                 <CardDescription>Connect external calendars to block off busy time automatically.</CardDescription>
             </CardHeader>
             <CardContent>
-                <CalendarConnect />
+                <CalendarConnect onConnectionChange={setIsGoogleSignedIn} />
             </CardContent>
           </Card>
 
@@ -322,7 +319,7 @@ export default function AvailabilityPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {isLoadingEvents && !isGoogleSignedIn ? (
+              {isLoadingEvents ? (
                  <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   <p className="ml-2 text-muted-foreground">Loading events...</p>

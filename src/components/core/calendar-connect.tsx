@@ -26,7 +26,7 @@ const OutlookIcon = () => (
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
-export function CalendarConnect() {
+export function CalendarConnect({ onConnectionChange }: { onConnectionChange: (isConnected: boolean) => void }) {
   const account = useActiveAccount();
   const { toast } = useToast();
 
@@ -40,27 +40,32 @@ export function CalendarConnect() {
       if (window.gapi) {
         setIsGoogleApiLoaded(true);
         // Set initial sign-in state once the API is loaded
-        setIsGoogleSignedIn(apiCalendar.sign);
+        const signedIn = apiCalendar.sign;
+        setIsGoogleSignedIn(signedIn);
+        onConnectionChange(signedIn);
       } else {
         setTimeout(checkGapiReady, 100); // Check again shortly
       }
     };
     checkGapiReady();
-  }, []);
+  }, [onConnectionChange]);
   
   const handleGoogleConnect = () => {
     setIsUpdating(true);
     apiCalendar.handleAuthClick()
       .then(() => {
         setIsGoogleSignedIn(true);
-        setIsUpdating(false);
+        onConnectionChange(true);
         toast({ title: "Success", description: "Google Calendar connected." });
       })
       .catch((e) => {
         console.error("Google Sign-In Error", e);
         toast({ title: "Error", description: "Failed to sign in with Google.", variant: "destructive" });
-        setIsUpdating(false);
         setIsGoogleSignedIn(false);
+        onConnectionChange(false);
+    })
+    .finally(() => {
+        setIsUpdating(false);
     });
   };
 
@@ -68,6 +73,7 @@ export function CalendarConnect() {
     setIsUpdating(true);
     apiCalendar.handleSignoutClick();
     setIsGoogleSignedIn(false);
+    onConnectionChange(false);
     setIsUpdating(false);
     toast({ title: "Success", description: "Google Calendar disconnected." });
   };
