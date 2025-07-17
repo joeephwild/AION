@@ -43,7 +43,7 @@ export function CalendarConnect({ onEventsFetched }: { onEventsFetched?: (events
 
     // Check if gapi is loaded and user is signed in
     if (!apiCalendar.sign || typeof window === 'undefined' || !(window as any).gapi?.client?.calendar) {
-      onEventsFetched([]);
+      if (onEventsFetched) onEventsFetched([]);
       return;
     }
 
@@ -57,15 +57,15 @@ export function CalendarConnect({ onEventsFetched }: { onEventsFetched?: (events
             end: new Date(item.end.dateTime || item.end.date),
             isAllDay: !!item.start.date,
         }));
-        onEventsFetched(events);
+        if (onEventsFetched) onEventsFetched(events);
     } catch (error) {
         console.error('Error fetching Google Calendar events:', error);
         toast({ title: "Error", description: "Could not fetch Google Calendar events.", variant: "destructive" });
-        onEventsFetched([]);
+        if (onEventsFetched) onEventsFetched([]);
     } finally {
       setIsLoadingEvents(false);
     }
-  }, [onEventsFetched, toast]);
+  }, [onEventsFetched]);
 
   useEffect(() => {
     const checkGapiReady = () => {
