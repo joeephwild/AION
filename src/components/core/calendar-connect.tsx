@@ -6,8 +6,8 @@ import { CheckCircle, Loader2 } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useActiveAccount } from "thirdweb/react";
+import apiCalendar from "@/lib/google-calendar";
 
-// Inline SVGs for Google and Outlook logos
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-5 w-5 mr-2 fill-current">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -23,94 +23,63 @@ const OutlookIcon = () => (
   </svg>
 );
 
-type ConnectionStatus = {
-  google: { connected: boolean; email: string | null };
-  outlook: { connected: boolean; email: string | null };
-};
-
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
 export function CalendarConnect() {
   const account = useActiveAccount();
-  const address = account?.address;
   const { toast } = useToast();
 
-  const [connections, setConnections] = useState<ConnectionStatus>({ google: { connected: false, email: null }, outlook: { connected: false, email: null } });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isUpdating, setIsUpdating] = useState<null | 'google' | 'outlook'>(null);
-
-  const fetchConnectionStatus = useCallback(async () => {
-    if (address) {
-      setIsLoading(true);
-      try {
-        const response = await fetch(`/api/calendar/connect/status`, {
-          headers: { 'x-user-id': address }
-        });
-        const data = await response.json();
-        if (data.success && data.connections) {
-          setConnections(data.connections);
-        } else {
-           setConnections({ google: { connected: false, email: null }, outlook: { connected: false, email: null } });
-        }
-      } catch (error) {
-        console.error("Failed to fetch calendar connection status:", error);
-        setConnections({ google: { connected: false, email: null }, outlook: { connected: false, email: null } });
-      } finally {
-        setIsLoading(false);
-      }
-    } else {
-      setConnections({ google: { connected: false, email: null }, outlook: { connected: false, email: null } });
-      setIsLoading(false);
-    }
-  }, [address]);
+  const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(false);
+  const [isGoogleApiLoaded, setIsGoogleApiLoaded] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
-    fetchConnectionStatus();
-  }, [fetchConnectionStatus]);
-
-  const handleGoogleConnect = async () => {
-    if (!address) return;
-    setIsUpdating('google');
-    try {
-      const response = await fetch('/api/calendar/connect/google', {
-        method: 'POST',
-        headers: { 'x-user-id': address },
-      });
-      const data = await response.json();
-      if (data.success && data.authUrl) {
-        // Redirect the user to Google's OAuth screen
-        window.location.href = data.authUrl;
+    // Check if the Google API script has loaded.
+    // The ApiCalendar constructor adds the script to the head, but we need to know when it's ready.
+    const checkGapiReady = () => {
+      if (window.gapi) {
+        setIsGoogleApiLoaded(true);
       } else {
-        throw new Error(data.message || 'Failed to get auth URL');
+        setTimeout(checkGapiReady, 100); // Check again shortly
       }
-    } catch (error) {
-      console.error('Google Connect Error:', error);
-      toast({ title: "Error", description: "Could not initiate connection to Google.", variant: "destructive"});
-      setIsUpdating(null);
-    }
+    };
+    checkGapiReady();
+  }, []);
+  
+  // Listener for Google Sign-in state changes from the library
+  useEffect(() => {
+    if (!isGoogleApiLoaded) return;
+
+    const handleSignInChange = (signedIn: boolean) => {
+      setIsGoogleSignedIn(signedIn);
+      setIsUpdating(false);
+    };
+
+    // Set initial state
+    setIsGoogleSignedIn(apiCalendar.sign);
+    // Subscribe to changes
+    apiCalendar.on('sign-in-status-change', handleSignInChange);
+
+    return () => {
+      // In a real app, you might want a way to remove the listener.
+      // This is a simplified cleanup.
+    };
+  }, [isGoogleApiLoaded]);
+
+
+  const handleGoogleConnect = () => {
+    setIsUpdating(true);
+    apiCalendar.handleAuthClick().catch((e) => {
+        console.error("Google Sign-In Error", e);
+        toast({ title: "Error", description: "Failed to sign in with Google.", variant: "destructive" });
+        setIsUpdating(false);
+    });
   };
 
-  const handleGoogleDisconnect = async () => {
-    if (!address) return;
-    setIsUpdating('google');
-    try {
-      const response = await fetch('/api/calendar/connect/google', {
-        method: 'DELETE',
-        headers: { 'x-user-id': address },
-      });
-      const data = await response.json();
-      if (data.success) {
-        toast({ title: "Success", description: "Disconnected from Google Calendar." });
-        await fetchConnectionStatus(); // Refresh status from backend
-      } else {
-        throw new Error(data.message || 'Failed to disconnect');
-      }
-    } catch (error) {
-        console.error('Google Disconnect Error:', error);
-        toast({ title: "Error", description: "Could not disconnect from Google.", variant: "destructive"});
-    } finally {
-        setIsUpdating(null);
-    }
+  const handleGoogleDisconnect = () => {
+    setIsUpdating(true);
+    apiCalendar.handleSignoutClick();
   };
 
   // Mock handler for Outlook
@@ -118,11 +87,11 @@ export function CalendarConnect() {
     toast({ title: "Note", description: "Outlook Calendar integration is not implemented in this prototype." });
   };
   
-  if (isLoading) {
+  if (!isGoogleApiLoaded) {
     return (
       <div className="flex items-center justify-center p-4">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        <span className="ml-2 text-muted-foreground">Loading...</span>
+        <span className="ml-2 text-muted-foreground">API Loading...</span>
       </div>
     );
   }
@@ -130,12 +99,12 @@ export function CalendarConnect() {
   return (
     <div className="space-y-4">
       <div>
-        {connections.google.connected ? (
+        {isGoogleSignedIn ? (
           <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
             <div className="flex items-center overflow-hidden">
               <GoogleIcon />
-              <span className="truncate" title={connections.google.email || 'Google Connected'}>
-                {connections.google.email || 'Google Connected'}
+              <span className="truncate" title={'Google Connected'}>
+                Google Connected
               </span>
               <CheckCircle className="ml-2 h-5 w-5 text-green-500 flex-shrink-0" />
             </div>
@@ -144,46 +113,36 @@ export function CalendarConnect() {
               size="sm"
               onClick={handleGoogleDisconnect}
               className="text-destructive"
-              disabled={isUpdating === 'google'}
+              disabled={isUpdating}
             >
-              {isUpdating === 'google' ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Disconnect'}
+              {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Disconnect'}
             </Button>
           </div>
         ) : (
           <Button
             onClick={handleGoogleConnect}
             className="w-full justify-start bg-card hover:bg-muted/50 text-foreground border shadow-sm"
-            disabled={isUpdating === 'google' || !account || !GOOGLE_CLIENT_ID}
-            title={!GOOGLE_CLIENT_ID ? "Google integration not configured by admin" : "Connect Google Calendar"}
+            disabled={isUpdating || !account || !GOOGLE_CLIENT_ID || !GOOGLE_API_KEY}
+            title={!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY ? "Google integration not configured by admin" : "Connect Google Calendar"}
           >
-            {isUpdating === 'google' ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <GoogleIcon />}
-            {isUpdating === 'google' ? 'Redirecting...' : 'Connect Google Calendar'}
+            {isUpdating ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <GoogleIcon />}
+            {isUpdating ? 'Connecting...' : 'Connect Google Calendar'}
           </Button>
         )}
-         {!GOOGLE_CLIENT_ID && (
+         {(!GOOGLE_CLIENT_ID || !GOOGLE_API_KEY) && (
            <p className="text-xs text-muted-foreground text-center pt-1">Google Calendar integration not configured.</p>
          )}
       </div>
       <div>
-        {connections.outlook.connected ? (
-          <div className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
-            <div className="flex items-center">
-              <OutlookIcon />
-              <span>Outlook Connected (Mock)</span>
-              <CheckCircle className="ml-2 h-5 w-5 text-green-500" />
-            </div>
-             <Button variant="link" size="sm" className="text-destructive" disabled>Disconnect</Button>
-          </div>
-        ) : (
           <Button
             onClick={handleOutlookToggle}
             className="w-full justify-start bg-card hover:bg-muted/50 text-foreground border shadow-sm"
-            disabled={!account}
+            disabled={true}
+            title="Outlook integration is not yet available"
           >
             <OutlookIcon />
             Connect Outlook Calendar
           </Button>
-        )}
       </div>
     </div>
   );

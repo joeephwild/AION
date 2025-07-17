@@ -3,7 +3,6 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Calendar as ShadCNCalendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -11,11 +10,12 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { useActiveAccount } from "thirdweb/react";
 import { useState, useEffect, useCallback } from "react";
-import { Save, AlertTriangle, CalendarClock, List, CalendarIcon as LucideCalendarIcon, Loader2 } from "lucide-react";
-import { toast, useToast } from "@/hooks/use-toast";
+import { Save, AlertTriangle, CalendarClock, List, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import type { WorkingHour, AvailabilitySettings, CalendarEvent } from "@/types";
 import { format } from "date-fns";
-import { CalendarConnect } from "@/components/core/calendar-connect"; // Re-add CalendarConnect
+import { CalendarConnect } from "@/components/core/calendar-connect";
+import apiCalendar from "@/lib/google-calendar";
 
 const defaultSettings: AvailabilitySettings = {
   workingHours: [
@@ -42,10 +42,28 @@ export default function AvailabilityPage() {
   const [workingHours, setWorkingHours] = useState<WorkingHour[]>(defaultSettings.workingHours);
   const [bufferTime, setBufferTime] = useState<number>(defaultSettings.bufferTime);
   const [minNoticeTime, setMinNoticeTime] = useState<number>(defaultSettings.minNoticeTime);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-
-  const [allCalendarEvents, setAllCalendarEvents] = useState<CalendarEvent[]>([]);
+  
+  const [googleCalendarEvents, setGoogleCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [outlookCalendarEvents, setOutlookCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(false);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+
+  // Listener for Google Sign-in state changes
+  useEffect(() => {
+    const handleSignInChange = (signedIn: boolean) => {
+      setIsGoogleSignedIn(signedIn);
+    };
+    // Set initial state
+    setIsGoogleSignedIn(apiCalendar.sign);
+    // Subscribe to changes
+    apiCalendar.on('sign-in-status-change', handleSignInChange);
+
+    return () => {
+      // It's good practice to have a way to remove the listener,
+      // though react-google-calendar-api doesn't provide a direct method.
+      // This is a simplified cleanup.
+    };
+  }, []);
   
   // Fetch creator's own availability settings
   useEffect(() => {
@@ -60,7 +78,6 @@ export default function AvailabilityPage() {
             setBufferTime(data.settings.bufferTime || defaultSettings.bufferTime);
             setMinNoticeTime(data.settings.minNoticeTime || defaultSettings.minNoticeTime);
           } else {
-            // Use defaults if no settings are found
             setWorkingHours(defaultSettings.workingHours);
             setBufferTime(defaultSettings.bufferTime);
             setMinNoticeTime(defaultSettings.minNoticeTime);
@@ -72,44 +89,65 @@ export default function AvailabilityPage() {
           setIsLoadingSettings(false);
         }
       } else {
-        // Not connected, just stop loading
         setIsLoadingSettings(false);
       }
     }
     fetchAvailabilitySettings();
   }, [isConnected, address, toast]);
 
-  // Fetch all external calendar events from our backend API
+  const fetchGoogleCalendarEvents = useCallback(async () => {
+      if (!isGoogleSignedIn) {
+          setGoogleCalendarEvents([]);
+          return;
+      }
+      setIsLoadingEvents(true);
+      try {
+          const response: any = await apiCalendar.listUpcomingEvents(50);
+          const items = response.result.items || [];
+          const events: CalendarEvent[] = items.map((item: any) => ({
+              title: item.summary || 'No Title (Google)',
+              start: new Date(item.start.dateTime || item.start.date),
+              end: new Date(item.end.dateTime || item.end.date),
+              isAllDay: !!item.start.date,
+          }));
+          setGoogleCalendarEvents(events);
+      } catch (error) {
+          console.error('Error fetching Google Calendar events:', error);
+          toast({ title: "Error", description: "Could not fetch Google Calendar events.", variant: "destructive" });
+          setGoogleCalendarEvents([]);
+      }
+  }, [isGoogleSignedIn, toast]);
+
   useEffect(() => {
-    async function fetchAllEvents() {
-        if (isConnected && address) {
-            setIsLoadingEvents(true);
-            try {
-                const response = await fetch(`/api/calendar/events?creatorId=${address}`);
-                const data = await response.json();
-                if (data.success && Array.isArray(data.events)) {
-                    const eventsWithDates = data.events.map((event: any) => ({
-                        ...event,
-                        start: new Date(event.start),
-                        end: new Date(event.end),
-                    }));
-                    setAllCalendarEvents(eventsWithDates);
-                } else {
-                    setAllCalendarEvents([]);
-                }
-            } catch (error) {
-                console.error("Failed to fetch all calendar events:", error);
-                setAllCalendarEvents([]);
-                toast({ title: "Error", description: "Could not load calendar events.", variant: "destructive"});
-            } finally {
-                setIsLoadingEvents(false);
+      fetchGoogleCalendarEvents();
+  }, [fetchGoogleCalendarEvents]);
+
+  // Fetch mock Outlook events from our backend API
+  useEffect(() => {
+    async function fetchOutlookEvents() {
+        setIsLoadingEvents(true);
+        try {
+            const response = await fetch(`/api/calendar/events`);
+            const data = await response.json();
+            if (data.success && Array.isArray(data.events)) {
+                const eventsWithDates = data.events.map((event: any) => ({
+                    ...event,
+                    start: new Date(event.start),
+                    end: new Date(event.end),
+                }));
+                setOutlookCalendarEvents(eventsWithDates);
+            } else {
+                setOutlookCalendarEvents([]);
             }
-        } else {
-            setAllCalendarEvents([]);
+        } catch (error) {
+            console.error("Failed to fetch mock Outlook events:", error);
+            setOutlookCalendarEvents([]);
+        } finally {
+            setIsLoadingEvents(false);
         }
     }
-    fetchAllEvents();
-  }, [isConnected, address, toast]);
+    fetchOutlookEvents();
+  }, [isConnected]);
 
   const handleWorkingHourChange = (day: string, field: keyof WorkingHour, value: string | boolean) => {
     setWorkingHours(prev =>
@@ -168,6 +206,9 @@ export default function AvailabilityPage() {
       </div>
     );
   }
+  
+  const allCalendarEvents = [...googleCalendarEvents, ...outlookCalendarEvents].sort((a,b) => a.start.getTime() - b.start.getTime());
+
 
   return (
     <div className="space-y-8">
@@ -275,14 +316,14 @@ export default function AvailabilityPage() {
 
            <Card className="shadow-lg">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><LucideCalendarIcon className="h-5 w-5 text-primary" /> Upcoming Events</CardTitle>
+              <CardTitle>Upcoming Events</CardTitle>
               <CardDescription>
                 Events from your connected calendars.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {isLoadingEvents ? (
-                <div className="flex items-center justify-center py-4">
+              {isLoadingEvents && !isGoogleSignedIn ? (
+                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   <p className="ml-2 text-muted-foreground">Loading events...</p>
                 </div>
@@ -307,23 +348,6 @@ export default function AvailabilityPage() {
                   </p>
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-lg">
-            <CardHeader>
-                <CardTitle>Override Availability</CardTitle>
-                <CardDescription>Block specific dates or times. (Mock Interface)</CardDescription>
-            </CardHeader>
-            <CardContent>
-                <ShadCNCalendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={setSelectedDate}
-                    className="rounded-md border mx-auto"
-                    disabled // Make it non-interactive for mock
-                />
-                <p className="text-sm text-muted-foreground mt-2 text-center">Interface for adding date overrides would be here.</p>
             </CardContent>
           </Card>
         </div>
