@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     if (userDocSnap.exists()) {
       const userData = userDocSnap.data();
-      if (userData && userData.calendarConnections) {
+      if (userData) {
         
         // Fetch live Google Calendar events if tokens exist
         if (userData.googleTokens && userData.googleTokens.access_token) {
@@ -50,12 +50,13 @@ export async function GET(request: NextRequest) {
             events = events.concat(googleEvents);
           } catch (e) {
             console.error(`Failed to fetch Google events for user ${creatorId}:`, e);
-            // Don't fail the whole request, just skip Google events
+            // Don't fail the whole request, just skip Google events. 
+            // This could happen if tokens are revoked. A production app might clear the tokens here.
           }
         }
 
         // Fetch mock Outlook events if connected
-        if (userData.calendarConnections.outlook?.connected) {
+        if (userData.calendarConnections?.outlook?.connected) {
           events = events.concat(getMockOutlookEvents());
         }
       }
