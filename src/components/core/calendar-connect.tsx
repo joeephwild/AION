@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useActiveAccount } from "thirdweb/react";
 import apiCalendar from "@/lib/google-calendar";
+import type { CalendarEvent } from "@/types";
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-5 w-5 mr-2 fill-current">
@@ -26,59 +27,86 @@ const OutlookIcon = () => (
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
-export function CalendarConnect({ onConnectionChange }: { onConnectionChange: (isConnected: boolean) => void }) {
+export function CalendarConnect({ onEventsFetched }: { onEventsFetched: (events: CalendarEvent[]) => void }) {
   const account = useActiveAccount();
   const { toast } = useToast();
 
   const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(false);
   const [isGoogleApiLoaded, setIsGoogleApiLoaded] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+
+  const fetchGoogleCalendarEvents = useCallback(async () => {
+    // Check if gapi is loaded and user is signed in
+    if (!apiCalendar.sign || typeof window === 'undefined' || !(window as any).gapi?.client?.calendar) {
+      onEventsFetched([]);
+      return;
+    }
+
+    setIsLoadingEvents(true);
+    try {
+        const response: any = await apiCalendar.listUpcomingEvents(50);
+        const items = response.result.items || [];
+        const events: CalendarEvent[] = items.map((item: any) => ({
+            title: item.summary || 'No Title (Google)',
+            start: new Date(item.start.dateTime || item.start.date),
+            end: new Date(item.end.dateTime || item.end.date),
+            isAllDay: !!item.start.date,
+        }));
+        onEventsFetched(events);
+    } catch (error) {
+        console.error('Error fetching Google Calendar events:', error);
+        toast({ title: "Error", description: "Could not fetch Google Calendar events.", variant: "destructive" });
+        onEventsFetched([]);
+    } finally {
+      setIsLoadingEvents(false);
+    }
+  }, [onEventsFetched, toast]);
 
   useEffect(() => {
-    // Check if the Google API script has loaded.
     const checkGapiReady = () => {
       if (window.gapi) {
         setIsGoogleApiLoaded(true);
-        // Set initial sign-in state once the API is loaded
         const signedIn = apiCalendar.sign;
         setIsGoogleSignedIn(signedIn);
-        onConnectionChange(signedIn);
+        if (signedIn) {
+          fetchGoogleCalendarEvents();
+        }
       } else {
-        setTimeout(checkGapiReady, 100); // Check again shortly
+        setTimeout(checkGapiReady, 100);
       }
     };
     checkGapiReady();
-  }, [onConnectionChange]);
-  
+  }, [fetchGoogleCalendarEvents]);
+
   const handleGoogleConnect = () => {
     setIsUpdating(true);
     apiCalendar.handleAuthClick()
       .then(() => {
         setIsGoogleSignedIn(true);
-        onConnectionChange(true);
         toast({ title: "Success", description: "Google Calendar connected." });
+        fetchGoogleCalendarEvents();
       })
       .catch((e) => {
         console.error("Google Sign-In Error", e);
         toast({ title: "Error", description: "Failed to sign in with Google.", variant: "destructive" });
         setIsGoogleSignedIn(false);
-        onConnectionChange(false);
-    })
-    .finally(() => {
+        onEventsFetched([]);
+      })
+      .finally(() => {
         setIsUpdating(false);
-    });
+      });
   };
 
   const handleGoogleDisconnect = () => {
     setIsUpdating(true);
     apiCalendar.handleSignoutClick();
     setIsGoogleSignedIn(false);
-    onConnectionChange(false);
+    onEventsFetched([]);
     setIsUpdating(false);
     toast({ title: "Success", description: "Google Calendar disconnected." });
   };
 
-  // Mock handler for Outlook
   const handleOutlookToggle = async () => {
     toast({ title: "Note", description: "Outlook Calendar integration is not implemented in this prototype." });
   };

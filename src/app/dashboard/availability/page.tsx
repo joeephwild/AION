@@ -15,7 +15,6 @@ import { useToast } from "@/hooks/use-toast";
 import type { WorkingHour, AvailabilitySettings, CalendarEvent } from "@/types";
 import { format } from "date-fns";
 import { CalendarConnect } from "@/components/core/calendar-connect";
-import apiCalendar from "@/lib/google-calendar";
 
 const defaultSettings: AvailabilitySettings = {
   workingHours: [
@@ -45,7 +44,6 @@ export default function AvailabilityPage() {
   
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState<CalendarEvent[]>([]);
   const [outlookCalendarEvents, setOutlookCalendarEvents] = useState<CalendarEvent[]>([]);
-  const [isGoogleSignedIn, setIsGoogleSignedIn] = useState(false);
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   
   // Fetch creator's own availability settings
@@ -77,47 +75,6 @@ export default function AvailabilityPage() {
     }
     fetchAvailabilitySettings();
   }, [isConnected, address, toast]);
-
-  const fetchGoogleCalendarEvents = useCallback(async () => {
-    if (!isGoogleSignedIn || typeof window === 'undefined' || !(window as any).gapi?.client?.calendar) {
-      setGoogleCalendarEvents([]);
-      return;
-    }
-
-    setIsLoadingEvents(true);
-    try {
-        const response: any = await apiCalendar.listUpcomingEvents(50);
-        const items = response.result.items || [];
-        const events: CalendarEvent[] = items.map((item: any) => ({
-            title: item.summary || 'No Title (Google)',
-            start: new Date(item.start.dateTime || item.start.date),
-            end: new Date(item.end.dateTime || item.end.date),
-            isAllDay: !!item.start.date,
-        }));
-        setGoogleCalendarEvents(events);
-    } catch (error) {
-        console.error('Error fetching Google Calendar events:', error);
-        toast({ title: "Error", description: "Could not fetch Google Calendar events.", variant: "destructive" });
-        setGoogleCalendarEvents([]);
-    } finally {
-      setIsLoadingEvents(false);
-    }
-  }, [isGoogleSignedIn, toast]);
-
-  useEffect(() => {
-    // Set initial sign-in state on component mount
-    const checkGapiReady = () => {
-      if (typeof window !== 'undefined' && (window as any).gapi) {
-        setIsGoogleSignedIn(apiCalendar.sign);
-        if (apiCalendar.sign) {
-          fetchGoogleCalendarEvents();
-        }
-      } else {
-        setTimeout(checkGapiReady, 100);
-      }
-    };
-    checkGapiReady();
-  }, [fetchGoogleCalendarEvents]);
 
   // Fetch mock Outlook events from our backend API
   useEffect(() => {
@@ -185,13 +142,8 @@ export default function AvailabilityPage() {
     }
   };
   
-  const onGoogleConnectionChange = (signedIn: boolean) => {
-    setIsGoogleSignedIn(signedIn);
-    if (signedIn) {
-      fetchGoogleCalendarEvents();
-    } else {
-      setGoogleCalendarEvents([]); // Clear events on disconnect
-    }
+  const onEventsFetched = (events: CalendarEvent[]) => {
+    setGoogleCalendarEvents(events);
   };
 
 
@@ -323,7 +275,7 @@ export default function AvailabilityPage() {
                 <CardDescription>Connect external calendars to block off busy time automatically.</CardDescription>
             </CardHeader>
             <CardContent>
-                <CalendarConnect onConnectionChange={onGoogleConnectionChange} />
+                <CalendarConnect onEventsFetched={onEventsFetched} />
             </CardContent>
           </Card>
 
@@ -368,5 +320,3 @@ export default function AvailabilityPage() {
     </div>
   );
 }
-
-    
