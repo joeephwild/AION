@@ -36,10 +36,11 @@ export function CalendarConnect() {
 
   useEffect(() => {
     // Check if the Google API script has loaded.
-    // The ApiCalendar constructor adds the script to the head, but we need to know when it's ready.
     const checkGapiReady = () => {
       if (window.gapi) {
         setIsGoogleApiLoaded(true);
+        // Set initial sign-in state once the API is loaded
+        setIsGoogleSignedIn(apiCalendar.sign);
       } else {
         setTimeout(checkGapiReady, 100); // Check again shortly
       }
@@ -47,39 +48,28 @@ export function CalendarConnect() {
     checkGapiReady();
   }, []);
   
-  // Listener for Google Sign-in state changes from the library
-  useEffect(() => {
-    if (!isGoogleApiLoaded) return;
-
-    const handleSignInChange = (signedIn: boolean) => {
-      setIsGoogleSignedIn(signedIn);
-      setIsUpdating(false);
-    };
-
-    // Set initial state
-    setIsGoogleSignedIn(apiCalendar.sign);
-    // Subscribe to changes
-    apiCalendar.on('sign-in-status-change', handleSignInChange);
-
-    return () => {
-      // In a real app, you might want a way to remove the listener.
-      // This is a simplified cleanup.
-    };
-  }, [isGoogleApiLoaded]);
-
-
   const handleGoogleConnect = () => {
     setIsUpdating(true);
-    apiCalendar.handleAuthClick().catch((e) => {
+    apiCalendar.handleAuthClick()
+      .then(() => {
+        setIsGoogleSignedIn(true);
+        setIsUpdating(false);
+        toast({ title: "Success", description: "Google Calendar connected." });
+      })
+      .catch((e) => {
         console.error("Google Sign-In Error", e);
         toast({ title: "Error", description: "Failed to sign in with Google.", variant: "destructive" });
         setIsUpdating(false);
+        setIsGoogleSignedIn(false);
     });
   };
 
   const handleGoogleDisconnect = () => {
     setIsUpdating(true);
     apiCalendar.handleSignoutClick();
+    setIsGoogleSignedIn(false);
+    setIsUpdating(false);
+    toast({ title: "Success", description: "Google Calendar disconnected." });
   };
 
   // Mock handler for Outlook
