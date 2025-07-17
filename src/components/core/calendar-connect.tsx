@@ -27,7 +27,8 @@ const OutlookIcon = () => (
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
-export function CalendarConnect({ onEventsFetched }: { onEventsFetched: (events: CalendarEvent[]) => void }) {
+// Make onEventsFetched optional by adding `?` and providing a default value.
+export function CalendarConnect({ onEventsFetched }: { onEventsFetched?: (events: CalendarEvent[]) => void }) {
   const account = useActiveAccount();
   const { toast } = useToast();
 
@@ -37,6 +38,9 @@ export function CalendarConnect({ onEventsFetched }: { onEventsFetched: (events:
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
 
   const fetchGoogleCalendarEvents = useCallback(async () => {
+    // Only fetch if the callback exists
+    if (!onEventsFetched) return;
+
     // Check if gapi is loaded and user is signed in
     if (!apiCalendar.sign || typeof window === 'undefined' || !(window as any).gapi?.client?.calendar) {
       onEventsFetched([]);
@@ -91,7 +95,7 @@ export function CalendarConnect({ onEventsFetched }: { onEventsFetched: (events:
         console.error("Google Sign-In Error", e);
         toast({ title: "Error", description: "Failed to sign in with Google.", variant: "destructive" });
         setIsGoogleSignedIn(false);
-        onEventsFetched([]);
+        if (onEventsFetched) onEventsFetched([]);
       })
       .finally(() => {
         setIsUpdating(false);
@@ -102,7 +106,7 @@ export function CalendarConnect({ onEventsFetched }: { onEventsFetched: (events:
     setIsUpdating(true);
     apiCalendar.handleSignoutClick();
     setIsGoogleSignedIn(false);
-    onEventsFetched([]);
+    if (onEventsFetched) onEventsFetched([]);
     setIsUpdating(false);
     toast({ title: "Success", description: "Google Calendar disconnected." });
   };
