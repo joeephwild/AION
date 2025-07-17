@@ -8,7 +8,7 @@ import Link from "next/link";
 import { PlusCircle, CalendarDays, ListChecks, Settings, ExternalLink, Eye, Zap, Loader2 } from "lucide-react";
 import { CalendarConnect } from "@/components/core/calendar-connect";
 import Image from "next/image";
-import type { Token, Booking } from "@/types";
+import type { Coin, Booking } from "@/types";
 import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { useToast } from "@/hooks/use-toast";
@@ -23,60 +23,60 @@ export default function DashboardPage() {
   const isConnected = !!address;
   const { toast } = useToast();
 
-  const [userTokens, setUserTokens] = useState<Token[]>([]);
-  const [isLoadingTokens, setIsLoadingTokens] = useState(true);
+  const [userCoins, setUserCoins] = useState<Coin[]>([]);
+  const [isLoadingCoins, setIsLoadingCoins] = useState(true);
   const [userBookings, setUserBookings] = useState<Booking[]>([]);
   const [isLoadingBookings, setIsLoadingBookings] = useState(true);
 
   useEffect(() => {
     async function fetchDashboardData() {
       if (isConnected && address) {
-        setIsLoadingTokens(true);
+        setIsLoadingCoins(true);
         setIsLoadingBookings(true);
 
-        // Fetch tokens from Firestore via API
+        // Fetch coins from Firestore via API
         try {
-          const tokensResponse = await fetch(`/api/tokens?creatorId=${address}`, { cache: 'no-store' });
-          const tokensData = await tokensResponse.json();
+          const coinsResponse = await fetch(`/api/tokens?creatorId=${address}`, { cache: 'no-store' });
+          const coinsData = await coinsResponse.json();
 
-          if (tokensResponse.ok && tokensData.success && Array.isArray(tokensData.tokens)) {
-            const firestoreTokens: Token[] = tokensData.tokens.map((t: any) => ({
-                ...t,
-                createdAt: t.createdAt ? new Date(t.createdAt) : undefined,
+          if (coinsResponse.ok && coinsData.success && Array.isArray(coinsData.coins)) {
+            const firestoreCoins: Coin[] = coinsData.coins.map((c: any) => ({
+                ...c,
+                createdAt: c.createdAt ? new Date(c.createdAt) : undefined,
             }));
 
-            const enrichedTokens: Token[] = [];
-            for (const basicTokenInfo of firestoreTokens) {
+            const enrichedCoins: Coin[] = [];
+            for (const basicCoinInfo of firestoreCoins) {
               try {
-                const response = await getCoin({ address: basicTokenInfo.id, chain: baseSepolia.id });
+                const response = await getCoin({ address: basicCoinInfo.id, chain: baseSepolia.id });
                 const coinData = response.data?.zora20Token;
                 if (coinData) {
-                  enrichedTokens.push({
-                    ...basicTokenInfo,
+                  enrichedCoins.push({
+                    ...basicCoinInfo,
                     id: coinData.address,
-                    name: coinData.name || basicTokenInfo.name,
-                    symbol: coinData.symbol || basicTokenInfo.symbol,
+                    name: coinData.name || basicCoinInfo.name,
+                    symbol: coinData.symbol || basicCoinInfo.symbol,
                     totalSupply: coinData.totalSupply?.toString(),
-                    imageUrl: coinData?.mediaContent?.previewImage as string || basicTokenInfo.imageUrl,
+                    imageUrl: coinData?.mediaContent?.previewImage as string || basicCoinInfo.imageUrl,
                   });
                 } else {
-                  enrichedTokens.push(basicTokenInfo);
+                  enrichedCoins.push(basicCoinInfo);
                 }
               } catch (error) {
-                console.warn(`Failed to fetch on-chain details for coin ${basicTokenInfo.id} on Base Sepolia:`, error);
-                enrichedTokens.push(basicTokenInfo); 
+                console.warn(`Failed to fetch on-chain details for coin ${basicCoinInfo.id} on Base Sepolia:`, error);
+                enrichedCoins.push(basicCoinInfo); 
               }
             }
-            setUserTokens(enrichedTokens.sort((a,b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0) ));
+            setUserCoins(enrichedCoins.sort((a,b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0) ));
           } else {
-            throw new Error(tokensData.message || 'Failed to fetch tokens from API');
+            throw new Error(coinsData.message || 'Failed to fetch coins from API');
           }
         } catch (error) {
-          console.error("Error fetching tokens from API/Firestore:", error);
-          toast({ title: "Error Fetching Tokens", description: error instanceof Error ? error.message : "Could not load your created tokens.", variant: "destructive" });
-          setUserTokens([]);
+          console.error("Error fetching coins from API/Firestore:", error);
+          toast({ title: "Error Fetching Coins", description: error instanceof Error ? error.message : "Could not load your created coins.", variant: "destructive" });
+          setUserCoins([]);
         } finally {
-          setIsLoadingTokens(false);
+          setIsLoadingCoins(false);
         }
         
         // Fetch bookings from Firestore via API
@@ -101,16 +101,16 @@ export default function DashboardPage() {
           setIsLoadingBookings(false);
         }
       } else if (!isConnected) {
-        setUserTokens([]);
+        setUserCoins([]);
         setUserBookings([]);
-        setIsLoadingTokens(false);
+        setIsLoadingCoins(false);
         setIsLoadingBookings(false);
       }
     }
     fetchDashboardData();
   }, [isConnected, address, toast]);
 
-  const isLoading = isLoadingTokens || isLoadingBookings;
+  const isLoading = isLoadingCoins || isLoadingBookings;
 
   if (isLoading && isConnected) { 
     return (
@@ -135,11 +135,11 @@ export default function DashboardPage() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Creator Dashboard</h1>
-          <p className="text-muted-foreground">Manage your Zora time tokens (Base Sepolia), calendar, and bookings.</p>
+          <p className="text-muted-foreground">Manage your Zora time coins (Base Sepolia), calendar, and bookings.</p>
         </div>
         <Button asChild size="lg" className="shadow-md hover:shadow-primary/30">
           <Link href="/mint">
-            <PlusCircle className="mr-2 h-5 w-5" /> Mint New Zora Token
+            <PlusCircle className="mr-2 h-5 w-5" /> Mint New Zora Coin
           </Link>
         </Button>
       </div>
@@ -149,41 +149,41 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="md:col-span-2 shadow-lg">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Zap className="h-6 w-6 text-primary" /> My Zora Time Tokens</CardTitle>
-            <CardDescription>View and manage your minted Zora time tokens on Base Sepolia.</CardDescription>
+            <CardTitle className="flex items-center gap-2"><Zap className="h-6 w-6 text-primary" /> My Zora Time Coins</CardTitle>
+            <CardDescription>View and manage your minted Zora time coins on Base Sepolia.</CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoadingTokens ? (
+            {isLoadingCoins ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                <p className="ml-2 text-muted-foreground">Loading tokens...</p>
+                <p className="ml-2 text-muted-foreground">Loading coins...</p>
               </div>
-            ) : userTokens.length > 0 ? (
+            ) : userCoins.length > 0 ? (
               <ul className="space-y-4">
-                {userTokens.map(token => (
-                  <li key={token.id} className="p-4 border rounded-lg bg-background hover:bg-muted/30 transition-colors">
+                {userCoins.map(coin => (
+                  <li key={coin.id} className="p-4 border rounded-lg bg-background hover:bg-muted/30 transition-colors">
                     <div className="flex justify-between items-start">
                       <div className="flex items-start gap-4">
                         <div className="relative w-16 h-16 shrink-0">
-                          <Image src={token.imageUrl || `https://placehold.co/128x128.png`} alt={token.name} layout="fill" className="rounded-md aspect-square object-cover" data-ai-hint="token icon" />
+                          <Image src={coin.imageUrl || `https://placehold.co/128x128.png`} alt={coin.name} layout="fill" className="rounded-md aspect-square object-cover" data-ai-hint="coin icon" />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-lg">{token.name} ({token.symbol})</h3>
+                          <h3 className="font-semibold text-lg">{coin.name} ({coin.symbol})</h3>
                           <p className="text-sm text-muted-foreground truncate max-w-xs">
-                            Contract: <Link href={`https://sepolia.basescan.org/address/${token.id}`} target="_blank" className="text-accent hover:underline">{`${token.id.slice(0,10)}...${token.id.slice(-8)}`}</Link>
+                            Contract: <Link href={`https://sepolia.basescan.org/address/${coin.id}`} target="_blank" className="text-accent hover:underline">{`${coin.id.slice(0,10)}...${coin.id.slice(-8)}`}</Link>
                           </p>
-                          {token.totalSupply && <p className="text-sm text-muted-foreground">Total Supply: {token.totalSupply}</p>}
-                           {token.uri && (
+                          {coin.totalSupply && <p className="text-sm text-muted-foreground">Total Supply: {coin.totalSupply}</p>}
+                           {coin.uri && (
                             <p className="text-sm text-muted-foreground truncate max-w-xs">
-                                URI: <Link href={token.uri.startsWith('ipfs://') ? `https://ipfs.io/ipfs/${token.uri.substring(7)}` : token.uri} target="_blank" className="text-accent hover:underline">{token.uri}</Link>
+                                URI: <Link href={coin.uri.startsWith('ipfs://') ? `https://ipfs.io/ipfs/${coin.uri.substring(7)}` : coin.uri} target="_blank" className="text-accent hover:underline">{coin.uri}</Link>
                             </p>
                            )}
-                           {token.createdAt && <p className="text-xs text-muted-foreground">Created: {token.createdAt.toLocaleDateString()}</p>}
+                           {coin.createdAt && <p className="text-xs text-muted-foreground">Created: {coin.createdAt.toLocaleDateString()}</p>}
                         </div>
                       </div>
                       <div className="flex gap-2 mt-2 sm:mt-0">
-                        <Button variant="outline" size="icon" aria-label="View Token on Sepolia Basescan" asChild>
-                           <Link href={`https://sepolia.basescan.org/address/${token.id}`} target="_blank">
+                        <Button variant="outline" size="icon" aria-label="View Coin on Sepolia Basescan" asChild>
+                           <Link href={`https://sepolia.basescan.org/address/${coin.id}`} target="_blank">
                              <Eye className="h-4 w-4 text-accent" />
                            </Link>
                         </Button>
@@ -194,11 +194,11 @@ export default function DashboardPage() {
               </ul>
             ) : (
               <div className="text-center py-8 rounded-lg border-2 border-dashed">
-                <Image src="https://placehold.co/300x200.png" data-ai-hint="empty state tokens" alt="No tokens" width={300} height={200} className="mx-auto mb-4 rounded-md opacity-50" />
-                <h3 className="text-xl font-semibold">No Tokens Minted Yet</h3>
-                <p className="text-muted-foreground mt-2 mb-4">It looks like you're just getting started. Mint your first token to represent your time!</p>
+                <Image src="https://placehold.co/300x200.png" data-ai-hint="empty state coins" alt="No coins" width={300} height={200} className="mx-auto mb-4 rounded-md opacity-50" />
+                <h3 className="text-xl font-semibold">No Coins Minted Yet</h3>
+                <p className="text-muted-foreground mt-2 mb-4">It looks like you're just getting started. Mint your first coin to represent your time!</p>
                 <Button asChild>
-                  <Link href="/mint"><PlusCircle className="mr-2 h-4 w-4" />Mint Your First Token</Link>
+                  <Link href="/mint"><PlusCircle className="mr-2 h-4 w-4" />Mint Your First Coin</Link>
                 </Button>
               </div>
             )}
@@ -246,7 +246,7 @@ export default function DashboardPage() {
                       </p>
                     </div>
                     <div className="mt-2 sm:mt-0 flex items-center gap-4">
-                       <p className="text-sm text-muted-foreground hidden md:block truncate max-w-[200px]" title={booking.tokenId}>Token: <Link href={`https://sepolia.basescan.org/token/${booking.tokenId}`} target="_blank" className="text-accent hover:underline">{`${booking.tokenId.slice(0,10)}...`}</Link></p>
+                       <p className="text-sm text-muted-foreground hidden md:block truncate max-w-[200px]" title={booking.coinId}>Coin: <Link href={`https://sepolia.basescan.org/token/${booking.coinId}`} target="_blank" className="text-accent hover:underline">{`${booking.coinId.slice(0,10)}...`}</Link></p>
                       <Badge variant={booking.status === 'confirmed' ? 'default' : 'destructive'} className={booking.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : ''}>
                         {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
                       </Badge>

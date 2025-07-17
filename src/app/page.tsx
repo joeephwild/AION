@@ -10,8 +10,8 @@ export default function HomePage() {
   const features = [
     {
       icon: <Zap className="h-8 w-8 text-primary" />,
-      title: "Instant Token Minting",
-      description: "Effortlessly mint ERC-20 tokens on Base Sepolia, representing your time and expertise.",
+      title: "Instant Coin Minting",
+      description: "Effortlessly mint ERC-20 coins on Base Sepolia, representing your time and expertise.",
     },
     {
       icon: <Clock className="h-8 w-8 text-primary" />,
@@ -20,13 +20,13 @@ export default function HomePage() {
     },
     {
       icon: <ShieldCheck className="h-8 w-8 text-primary" />,
-      title: "Token-Gated Access",
-      description: "Enable clients to book your time by acquiring your unique creator tokens, ensuring committed engagement.",
+      title: "Coin-Gated Access",
+      description: "Enable clients to book your time by acquiring your unique creator coins, ensuring committed engagement.",
     },
     {
       icon: <BarChart3 className="h-8 w-8 text-primary" />,
       title: "Creator Dashboard",
-      description: "Manage your tokens, bookings, profile, and calendar integrations all in one place.",
+      description: "Manage your coins, bookings, profile, and calendar integrations all in one place.",
     },
   ];
 
@@ -39,8 +39,8 @@ export default function HomePage() {
       },
       { 
         icon: <Palette className="h-10 w-10 text-accent" />, 
-        title: "Mint Your Tokens", 
-        description: "Define and mint unique ERC-20 tokens that represent your services or time." 
+        title: "Mint Your Coins", 
+        description: "Define and mint unique ERC-20 coins that represent your services or time." 
       },
       { 
         icon: <CalendarCheck className="h-10 w-10 text-accent" />, 
@@ -56,13 +56,13 @@ export default function HomePage() {
       },
       { 
         icon: <DollarSign className="h-10 w-10 text-primary" />, 
-        title: "Acquire Access Token", 
-        description: "Purchase or earn the creator's specific token required for booking." 
+        title: "Acquire Access Coin", 
+        description: "Purchase or earn the creator's specific coin required for booking." 
       },
       { 
         icon: <Clock className="h-10 w-10 text-primary" />, 
         title: "Book Your Session", 
-        description: "Seamlessly book an available time slot using your token." 
+        description: "Seamlessly book an available time slot using your coin." 
       },
     ]
   };
@@ -73,7 +73,7 @@ export default function HomePage() {
       price: "Free",
       description: "Perfect for individuals getting started.",
       features: [
-        "1 Active Token Type",
+        "1 Active Coin Type",
         "Basic Calendar Integration (Google)",
         "Public Profile Page",
         "Up to 10 Bookings/month",
@@ -89,7 +89,7 @@ export default function HomePage() {
       period: "/month",
       description: "For professionals scaling their services.",
       features: [
-        "Unlimited Token Types",
+        "Unlimited Coin Types",
         "Advanced Calendar Integrations (Google & Outlook)",
         "Customizable Profile Page",
         "Unlimited Bookings",
@@ -121,19 +121,19 @@ export default function HomePage() {
   const faqItems = [
     {
       question: "What is Aion?",
-      answer: "Aion is a platform that empowers creators to tokenize their time and services using Web3 technology. Creators can mint unique ERC-20 tokens, and clients can use these tokens to book sessions, consultations, or access exclusive content.",
+      answer: "Aion is a platform that empowers creators to tokenize their time and services using Web3 technology. Creators can mint unique ERC-20 coins, and clients can use these coins to book sessions, consultations, or access exclusive content.",
     },
     {
-      question: "How does token-gating work for bookings?",
-      answer: "Creators define which specific token (and sometimes how many) is required to book a particular service or time slot. Clients must hold this token in their connected wallet to be able to complete a booking, ensuring genuine interest and value exchange.",
+      question: "How does coin-gating work for bookings?",
+      answer: "Creators define which specific coin (and sometimes how many) is required to book a particular service or time slot. Clients must hold this coin in their connected wallet to be able to complete a booking, ensuring genuine interest and value exchange.",
     },
     {
-      question: "What blockchain does Aion use for tokens?",
-      answer: "Aion leverages Zora's infrastructure on the Base Sepolia testnet for minting time tokens. This provides a scalable and cost-effective solution.",
+      question: "What blockchain does Aion use for coins?",
+      answer: "Aion leverages Zora's infrastructure on the Base Sepolia testnet for minting time coins. This provides a scalable and cost-effective solution.",
     },
     {
       question: "Are there any fees for using Aion?",
-      answer: "Our 'Creator Starter' plan is free. For advanced features, we offer paid plans like 'Creator Pro'. Standard blockchain transaction fees (gas fees) apply when minting tokens or interacting with smart contracts.",
+      answer: "Our 'Creator Starter' plan is free. For advanced features, we offer paid plans like 'Creator Pro'. Standard blockchain transaction fees (gas fees) apply when minting coins or interacting with smart contracts.",
     },
     {
       question: "Can I integrate my existing calendar?",
@@ -150,7 +150,7 @@ export default function HomePage() {
           <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">Tokenize Your Time</span>
         </h1>
         <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
-          Aion empowers creators, coaches, and consultants to launch time-based access tokens. Offer exclusive sessions and manage bookings seamlessly with Web3.
+          Aion empowers creators, coaches, and consultants to launch time-based access coins. Offer exclusive sessions and manage bookings seamlessly with Web3.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
           <Button size="lg" asChild className="shadow-lg hover:shadow-primary/40 transform hover:scale-105 transition-transform duration-200">
@@ -309,7 +309,7 @@ export default function HomePage() {
               Ready to Revolutionize Your Access?
             </h3>
             <p className="text-lg text-muted-foreground">
-              Join Aion today. Connect your wallet, mint your first time token, and start offering exclusive access to your expertise. No complex setups, just pure Web3 power.
+              Join Aion today. Connect your wallet, mint your first time coin, and start offering exclusive access to your expertise. No complex setups, just pure Web3 power.
             </p>
             <Button size="lg" asChild className="mt-4 shadow-lg hover:shadow-primary/40 transform hover:scale-105 transition-transform duration-200">
               <Link href="/dashboard">

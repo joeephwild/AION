@@ -11,7 +11,7 @@ export type CreatorPublicProfile = CreatorProfileData & {
   id: string; // Wallet address
 };
 
-export type Token = {
+export type Coin = {
   id: string; // Zora Coin contract address
   name: string;
   symbol: string;
@@ -22,16 +22,16 @@ export type Token = {
   createdAt?: Date; // Added for Firestore timestamp
 };
 
-// Type used by BookingPage and DashboardPage. It combines public profile with dynamic token data.
+// Type used by BookingPage and DashboardPage. It combines public profile with dynamic coin data.
 export type Creator = CreatorPublicProfile & {
-  tokens: Token[];
+  coins: Coin[];
 };
 
 export type Booking = {
   id: string;
   creatorId: string;
   clientId: string; // Wallet address of booker
-  tokenId: string; // Token used for booking (Zora Coin contract address)
+  coinId: string; // Coin used for booking (Zora Coin contract address)
   startTime: Date;
   endTime: Date;
   status: 'confirmed' | 'pending' | 'cancelled';

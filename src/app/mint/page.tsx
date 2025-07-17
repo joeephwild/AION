@@ -16,13 +16,13 @@ import { baseSepolia } from "thirdweb/chains";
 import { createCoinCall, getCoinCreateFromLogs } from "@zoralabs/coins-sdk";
 import { type Address, createPublicClient, http } from "viem";
 import Link from "next/link";
-import type { Token } from "@/types"; // Ensure Token type is imported
+import type { Coin } from "@/types"; // Ensure Coin type is imported
 import { client } from "@/lib/thirdweb";
 
 
 // Schema for Zora Coin creation
-const mintTokenFormSchema = z.object({
-  name: z.string().min(2, "Token name must be at least 2 characters.").max(50, "Token name must be at most 50 characters."),
+const mintCoinFormSchema = z.object({
+  name: z.string().min(2, "Coin name must be at least 2 characters.").max(50, "Coin name must be at most 50 characters."),
   symbol: z.string().min(2, "Symbol must be at least 2 characters.").max(10, "Symbol must be at most 10 characters.").regex(/^[A-Z0-9]+$/, "Symbol can only contain uppercase letters and numbers."),
   uri: z.string().refine(value => {
     return value.startsWith("ipfs://") || value.startsWith("https://");
@@ -33,7 +33,7 @@ const mintTokenFormSchema = z.object({
   }, "URI must not be empty after the protocol."),
 });
 
-type MintTokenFormValues = z.infer<typeof mintTokenFormSchema>;
+type MintCoinFormValues = z.infer<typeof mintCoinFormSchema>;
 
 // Create a Viem public client for Base Sepolia chain to fetch transaction receipts
 const publicClient = createPublicClient({
@@ -41,7 +41,7 @@ const publicClient = createPublicClient({
   transport: http('https://sepolia.base.org'),
 });
 
-export default function MintTokenPage() {
+export default function MintCoinPage() {
   const account = useActiveAccount();
   const address = account?.address as Address | undefined;
   const { toast } = useToast();
@@ -51,8 +51,8 @@ export default function MintTokenPage() {
   const [transactionHash, setTransactionHash] = useState<string | null>(null);
   const { mutate: sendTransaction, isPending: isTransactionPending } = useSendTransaction();
 
-  const form = useForm<MintTokenFormValues>({
-    resolver: zodResolver(mintTokenFormSchema),
+  const form = useForm<MintCoinFormValues>({
+    resolver: zodResolver(mintCoinFormSchema),
     defaultValues: {
       name: "",
       symbol: "",
@@ -60,11 +60,11 @@ export default function MintTokenPage() {
     },
   });
 
-  async function onSubmit(values: MintTokenFormValues) {
+  async function onSubmit(values: MintCoinFormValues) {
     if (!address || !account) {
       toast({
         title: "Wallet Not Connected",
-        description: "Please connect your wallet to mint a token.",
+        description: "Please connect your wallet to mint a coin.",
         variant: "destructive",
       });
       return;
@@ -144,9 +144,9 @@ export default function MintTokenPage() {
                 console.log("Coin deployed successfully on Base Sepolia. Address:", finalCoinAddress);
                 setDeployedCoinAddress(finalCoinAddress);
                 
-                // Save token to Firestore via API
-                setMintingStep("Saving token details to Aion...");
-                const tokenToSave: Omit<Token, 'createdAt' | 'totalSupply' | 'imageUrl'> = {
+                // Save coin to Firestore via API
+                setMintingStep("Saving coin details to Aion...");
+                const coinToSave: Omit<Coin, 'createdAt' | 'totalSupply' | 'imageUrl'> = {
                   id: finalCoinAddress,
                   name: values.name,
                   symbol: values.symbol,
@@ -160,16 +160,16 @@ export default function MintTokenPage() {
                     'Content-Type': 'application/json',
                     'x-user-id': address, 
                   },
-                  body: JSON.stringify(tokenToSave),
+                  body: JSON.stringify(coinToSave),
                 });
 
                 if (!saveResponse.ok) {
                   const errorResult = await saveResponse.json();
-                  throw new Error(errorResult.message || 'Failed to save token to Aion backend.');
+                  throw new Error(errorResult.message || 'Failed to save coin to Aion backend.');
                 }
                 
                 toast({
-                  title: "Token Minted & Saved!",
+                  title: "Coin Minted & Saved!",
                   description: `Coin Address: ${finalCoinAddress}`,
                   variant: "default",
                   duration: 8000,
@@ -191,7 +191,7 @@ export default function MintTokenPage() {
               console.error("Error processing transaction result or saving to Firestore:", processingError);
               toast({
                 title: "Post-Mint Processing Failed",
-                description: processingError instanceof Error ? processingError.message : "Could not finalize token creation.",
+                description: processingError instanceof Error ? processingError.message : "Could not finalize coin creation.",
                 variant: "destructive",
               });
             } finally {
@@ -241,8 +241,8 @@ export default function MintTokenPage() {
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <Card className="w-full max-w-md p-8 shadow-xl">
            <Zap className="h-12 w-12 text-primary mx-auto mb-4" />
-          <h2 className="text-2xl font-semibold mb-2">Mint Your Time Token</h2>
-          <p className="text-muted-foreground mb-6">Connect your wallet to create and launch your unique access tokens on Zora (Base Sepolia Testnet).</p>
+          <h2 className="text-2xl font-semibold mb-2">Mint Your Time Coin</h2>
+          <p className="text-muted-foreground mb-6">Connect your wallet to create and launch your unique access coins on Zora (Base Sepolia Testnet).</p>
            <div className="flex items-center justify-center p-4 mt-4 bg-destructive/10 text-destructive rounded-md">
             <AlertTriangle className="h-5 w-5 mr-2" />
             Please connect your wallet to proceed.
@@ -260,10 +260,10 @@ export default function MintTokenPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-2xl">
             <Zap className="h-7 w-7 text-primary" />
-            Mint New Zora Time Token (Base Sepolia)
+            Mint New Zora Time Coin (Base Sepolia)
           </CardTitle>
           <CardDescription>
-            Create your unique ERC-20 token on Zora (Base Sepolia testnet) to represent access to your time or services.
+            Create your unique ERC-20 coin on Zora (Base Sepolia testnet) to represent access to your time or services.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -274,11 +274,11 @@ export default function MintTokenPage() {
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Token Name</FormLabel>
+                    <FormLabel>Coin Name</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g., 1-Hour Design Consultation" {...field} disabled={currentSubmitButtonState}/>
                     </FormControl>
-                    <FormDescription>The full name of your token.</FormDescription>
+                    <FormDescription>The full name of your coin.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -288,7 +288,7 @@ export default function MintTokenPage() {
                 name="symbol"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Token Symbol</FormLabel>
+                    <FormLabel>Coin Symbol</FormLabel>
                     <FormControl>
                       <Input placeholder="e.g., DESIGN60" {...field} disabled={currentSubmitButtonState}/>
                     </FormControl>
@@ -307,8 +307,8 @@ export default function MintTokenPage() {
                       <Input placeholder="ipfs://<CID_of_metadata_json>" {...field} disabled={currentSubmitButtonState}/>
                     </FormControl>
                     <FormDescription>
-                      Provide a complete and valid link to your token's JSON metadata (e.g., `ipfs://YOUR_CID_HERE` or `https://example.com/metadata.json`).
-                      This file should contain details like name, description, and image URL for your token. See the
+                      Provide a complete and valid link to your coin's JSON metadata (e.g., `ipfs://YOUR_CID_HERE` or `https://example.com/metadata.json`).
+                      This file should contain details like name, description, and image URL for your coin. See the
                       <Button variant="link" asChild className="p-0 h-auto ml-1 text-accent hover:text-primary">
                          <Link href="https://docs.zora.co/docs/smart-contracts/creator-tools/metadata" target="_blank" rel="noopener noreferrer">
                             Zora Metadata Docs <ExternalLink className="h-3 w-3 ml-1" />

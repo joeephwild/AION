@@ -4,9 +4,9 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { db } from '@/lib/firebase';
 import { collection, doc, setDoc, getDocs, query, where, serverTimestamp, Timestamp } from 'firebase/firestore';
-import type { Token } from '@/types';
+import type { Coin } from '@/types';
 
-// POST /api/tokens - Save a new token to Firestore
+// POST /api/tokens - Save a new coin to Firestore
 export async function POST(request: NextRequest) {
   const authenticatedUserId = request.headers.get('x-user-id');
 
@@ -15,35 +15,35 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const tokenData = await request.json() as Omit<Token, 'createdAt'>;
+    const coinData = await request.json() as Omit<Coin, 'createdAt'>;
 
-    if (!tokenData.id || !tokenData.name || !tokenData.symbol || !tokenData.creatorId) {
-      return NextResponse.json({ success: false, message: 'Missing required token fields (id, name, symbol, creatorId)' }, { status: 400 });
+    if (!coinData.id || !coinData.name || !coinData.symbol || !coinData.creatorId) {
+      return NextResponse.json({ success: false, message: 'Missing required coin fields (id, name, symbol, creatorId)' }, { status: 400 });
     }
 
-    if (authenticatedUserId !== tokenData.creatorId) {
-      return NextResponse.json({ success: false, message: 'Forbidden: Creator ID in token data does not match authenticated user.' }, { status: 403 });
+    if (authenticatedUserId !== coinData.creatorId) {
+      return NextResponse.json({ success: false, message: 'Forbidden: Creator ID in coin data does not match authenticated user.' }, { status: 403 });
     }
 
-    const tokenDocRef = doc(db, 'tokens', tokenData.id); // Use token contract address as document ID
+    const coinDocRef = doc(db, 'coins', coinData.id); // Use coin contract address as document ID
 
     const dataToSet = {
-      ...tokenData,
-      contractAddress: tokenData.id, // Explicitly store contractAddress for querying if needed, matches id
+      ...coinData,
+      contractAddress: coinData.id, // Explicitly store contractAddress for querying if needed, matches id
       createdAt: serverTimestamp(),
     };
 
-    await setDoc(tokenDocRef, dataToSet);
+    await setDoc(coinDocRef, dataToSet);
 
-    return NextResponse.json({ success: true, message: 'Token saved successfully to Firestore.', tokenId: tokenData.id }, { status: 201 });
+    return NextResponse.json({ success: true, message: 'Coin saved successfully to Firestore.', coinId: coinData.id }, { status: 201 });
   } catch (error) {
-    console.error('Failed to save token to Firestore:', error);
+    console.error('Failed to save coin to Firestore:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    return NextResponse.json({ success: false, message: 'Failed to save token to Firestore', error: errorMessage }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'Failed to save coin to Firestore', error: errorMessage }, { status: 500 });
   }
 }
 
-// GET /api/tokens?creatorId=... - Fetch tokens for a specific creator
+// GET /api/tokens?creatorId=... - Fetch coins for a specific creator
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const creatorId = searchParams.get('creatorId');
@@ -53,14 +53,14 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const tokensRef = collection(db, 'tokens');
-    const q = query(tokensRef, where('creatorId', '==', creatorId));
+    const coinsRef = collection(db, 'coins');
+    const q = query(coinsRef, where('creatorId', '==', creatorId));
     const querySnapshot = await getDocs(q);
 
-    const fetchedTokens: Token[] = [];
+    const fetchedCoins: Coin[] = [];
     querySnapshot.forEach((docSnap) => {
       const data = docSnap.data();
-      fetchedTokens.push({
+      fetchedCoins.push({
         id: docSnap.id, // This is the contract address (document ID)
         name: data.name,
         symbol: data.symbol,
@@ -73,12 +73,12 @@ export async function GET(request: NextRequest) {
     });
 
     // Optionally sort by createdAt, newest first
-    fetchedTokens.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+    fetchedCoins.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
 
-    return NextResponse.json({ success: true, tokens: fetchedTokens });
+    return NextResponse.json({ success: true, coins: fetchedCoins });
   } catch (error) {
-    console.error('Failed to fetch tokens from Firestore:', error);
+    console.error('Failed to fetch coins from Firestore:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    return NextResponse.json({ success: false, message: 'Failed to fetch tokens from Firestore', error: errorMessage }, { status: 500 });
+    return NextResponse.json({ success: false, message: 'Failed to fetch coins from Firestore', error: errorMessage }, { status: 500 });
   }
 }

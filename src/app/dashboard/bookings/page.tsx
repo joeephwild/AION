@@ -59,7 +59,7 @@ const BookingCard = ({ booking, perspective, profile, onCancel, isCancelling }: 
         <div className="text-sm space-y-2">
           <p><strong>Date:</strong> {format(booking.startTime, "EEEE, MMMM d, yyyy")}</p>
           <p><strong>Time:</strong> {format(booking.startTime, "p")} - {format(booking.endTime, "p")}</p>
-          <p className="truncate"><strong>Token Used:</strong> <Link href={`https://sepolia.basescan.org/token/${booking.tokenId}`} target="_blank" className="text-accent hover:underline">{booking.tokenId}</Link></p>
+          <p className="truncate"><strong>Coin Used:</strong> <Link href={`https://sepolia.basescan.org/token/${booking.coinId}`} target="_blank" className="text-accent hover:underline">{booking.coinId}</Link></p>
         </div>
       </CardContent>
       {!isPast && booking.status === 'confirmed' && (

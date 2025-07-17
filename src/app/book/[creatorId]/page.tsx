@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import { useState, useEffect, useCallback } from "react";
-import type { CreatorPublicProfile, Token, Booking, AvailabilitySettings, CalendarEvent as AppCalendarEvent } from "@/types";
+import type { CreatorPublicProfile, Coin, Booking, AvailabilitySettings, CalendarEvent as AppCalendarEvent } from "@/types";
 import { useActiveAccount } from "thirdweb/react";
 import { getContract } from "thirdweb";
 import { balanceOf } from "thirdweb/extensions/erc20";
@@ -52,15 +52,15 @@ export default function BookingPage() {
   const { toast } = useToast();
   
   const [creator, setCreator] = useState<CreatorPublicProfile | null>(null);
-  const [creatorTokens, setCreatorTokens] = useState<Token[]>([]); // Separate from profile, as it's fetched differently
+  const [creatorCoins, setCreatorCoins] = useState<Coin[]>([]); // Separate from profile, as it's fetched differently
   const [availabilitySettings, setAvailabilitySettings] = useState<AvailabilitySettings | null>(null);
   const [creatorBookings, setCreatorBookings] = useState<Booking[]>([]);
   const [externalCalendarEvents, setExternalCalendarEvents] = useState<AppCalendarEvent[]>([]);
   const [calculatedSlots, setCalculatedSlots] = useState<CalculatedSlot[]>([]);
   
   const [selectedSlot, setSelectedSlot] = useState<CalculatedSlot | null>(null);
-  const [hasRequiredToken, setHasRequiredToken] = useState(false);
-  const [isCheckingTokenBalance, setIsCheckingTokenBalance] = useState(false);
+  const [hasRequiredCoin, setHasRequiredCoin] = useState(false);
+  const [isCheckingCoinBalance, setIsCheckingCoinBalance] = useState(false);
   
   const [isLoadingCreator, setIsLoadingCreator] = useState(true);
   const [isLoadingAvailability, setIsLoadingAvailability] = useState(true);
@@ -99,65 +99,65 @@ export default function BookingPage() {
     fetchCreatorProfile();
   }, [creatorIdParam, toast]);
 
-  // Fetch Creator Tokens (from Firestore via API)
+  // Fetch Creator Coins (from Firestore via API)
   useEffect(() => {
-    async function fetchCreatorTokens() {
+    async function fetchCreatorCoins() {
       if (!creatorIdParam) {
-        setCreatorTokens([]);
+        setCreatorCoins([]);
         return;
       }
       try {
         const response = await fetch(`/api/tokens?creatorId=${creatorIdParam}`);
         const data = await response.json();
-        if (data.success && Array.isArray(data.tokens)) {
-           const firestoreTokens: Token[] = data.tokens.map((t: any) => ({
-                ...t,
-                createdAt: t.createdAt ? new Date(t.createdAt) : undefined,
+        if (data.success && Array.isArray(data.coins)) {
+           const firestoreCoins: Coin[] = data.coins.map((c: any) => ({
+                ...c,
+                createdAt: c.createdAt ? new Date(c.createdAt) : undefined,
             }));
             // Potentially enrich with on-chain data if needed here, or assume API returns enough
-            setCreatorTokens(firestoreTokens);
+            setCreatorCoins(firestoreCoins);
         } else {
-          setCreatorTokens([]);
-          console.error("Failed to fetch creator tokens:", data.message);
+          setCreatorCoins([]);
+          console.error("Failed to fetch creator coins:", data.message);
         }
       } catch (error) {
-        console.error("Error fetching creator tokens:", error);
-        setCreatorTokens([]);
+        console.error("Error fetching creator coins:", error);
+        setCreatorCoins([]);
       }
     }
-    fetchCreatorTokens();
+    fetchCreatorCoins();
   }, [creatorIdParam]);
 
 
-  // Check Token Balance
+  // Check Coin Balance
   useEffect(() => {
-    async function checkTokenBalance() {
-      if (!isWalletConnected || !connectedAddress || !creatorTokens.length) {
-        setHasRequiredToken(false);
+    async function checkCoinBalance() {
+      if (!isWalletConnected || !connectedAddress || !creatorCoins.length) {
+        setHasRequiredCoin(false);
         return;
       }
       
-      const requiredToken = creatorTokens[0]; // Assuming the first token is the one needed
-      if (!requiredToken || !requiredToken.id) {
-        setHasRequiredToken(false);
+      const requiredCoin = creatorCoins[0]; // Assuming the first coin is the one needed
+      if (!requiredCoin || !requiredCoin.id) {
+        setHasRequiredCoin(false);
         return;
       }
 
-      setIsCheckingTokenBalance(true);
+      setIsCheckingCoinBalance(true);
       try {
-        const contract = getContract({ client, chain: baseSepolia, address: requiredToken.id as `0x${string}` });
+        const contract = getContract({ client, chain: baseSepolia, address: requiredCoin.id as `0x${string}` });
         const balance = await balanceOf({ contract, owner: connectedAddress as `0x${string}` });
-        setHasRequiredToken(balance > 0n);
+        setHasRequiredCoin(balance > 0n);
       } catch (error) {
-        console.error("Failed to check token balance:", error);
-        setHasRequiredToken(false);
-        toast({ title: "Token Check Error", description: "Could not verify your token balance.", variant: "destructive" });
+        console.error("Failed to check coin balance:", error);
+        setHasRequiredCoin(false);
+        toast({ title: "Coin Check Error", description: "Could not verify your coin balance.", variant: "destructive" });
       } finally {
-        setIsCheckingTokenBalance(false);
+        setIsCheckingCoinBalance(false);
       }
     }
-    checkTokenBalance();
-  }, [isWalletConnected, connectedAddress, creatorTokens, toast]);
+    checkCoinBalance();
+  }, [isWalletConnected, connectedAddress, creatorCoins, toast]);
 
   // Fetch Availability Settings
   useEffect(() => {
@@ -311,17 +311,17 @@ export default function BookingPage() {
       toast({ title: "Connect Wallet", description: "Please connect your wallet to book a session.", variant: "destructive" });
       return;
     }
-    if (!creator || !creatorTokens.length) {
-       toast({ title: "Booking Error", description: "Creator or token information is missing.", variant: "destructive" });
+    if (!creator || !creatorCoins.length) {
+       toast({ title: "Booking Error", description: "Creator or coin information is missing.", variant: "destructive" });
       return;
     }
-    const requiredToken = creatorTokens[0];
-    if (!hasRequiredToken) {
+    const requiredCoin = creatorCoins[0];
+    if (!hasRequiredCoin) {
       toast({
-        title: "Token Required",
-        description: `You need a "${requiredToken.name}" to book this session.`,
+        title: "Coin Required",
+        description: `You need a "${requiredCoin.name}" to book this session.`,
         variant: "destructive",
-        action: <Button onClick={() => alert(`Redirect to buy ${requiredToken.symbol}`)}>Buy Token</Button> // Placeholder
+        action: <Button onClick={() => alert(`Redirect to buy ${requiredCoin.symbol}`)}>Buy Coin</Button> // Placeholder
       });
       return;
     }
@@ -338,7 +338,7 @@ export default function BookingPage() {
         },
         body: JSON.stringify({
           creatorId: creator.id,
-          tokenId: requiredToken.id,
+          coinId: requiredCoin.id,
           startTime: slot.start.toISOString(),
           endTime: slot.end.toISOString(),
         }),
@@ -374,7 +374,7 @@ export default function BookingPage() {
   };
   
   const overallIsLoading = isLoadingCreator || isLoadingAvailability || isLoadingBookings || isLoadingExternalEvents || isCalculatingSlots;
-  const requiredTokenDetails = creatorTokens.length > 0 ? creatorTokens[0] : null;
+  const requiredCoinDetails = creatorCoins.length > 0 ? creatorCoins[0] : null;
 
   if (isLoadingCreator) {
     return (
@@ -410,9 +410,9 @@ export default function BookingPage() {
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground text-center">{creator.bio || 'No bio available.'}</p>
-            {requiredTokenDetails && (
+            {requiredCoinDetails && (
               <div className="mt-4 p-3 bg-muted/30 rounded-md text-center">
-                <p className="text-sm font-semibold">Requires: <span className="text-primary">{requiredTokenDetails.name} ({requiredTokenDetails.symbol})</span></p>
+                <p className="text-sm font-semibold">Requires: <span className="text-primary">{requiredCoinDetails.name} ({requiredCoinDetails.symbol})</span></p>
               </div>
             )}
           </CardContent>
@@ -422,44 +422,44 @@ export default function BookingPage() {
           <Card className="bg-primary/10 border-primary/30 shadow-lg">
             <CardContent className="pt-6 text-center">
               <AlertTriangle className="h-8 w-8 text-primary mx-auto mb-2" />
-              <p className="font-semibold">Connect your wallet to check token status and book sessions.</p>
+              <p className="font-semibold">Connect your wallet to check coin status and book sessions.</p>
             </CardContent>
           </Card>
         )}
 
-        {isWalletConnected && requiredTokenDetails && isCheckingTokenBalance && (
+        {isWalletConnected && requiredCoinDetails && isCheckingCoinBalance && (
           <Card className="bg-muted/20 border-border shadow-md">
             <CardContent className="pt-6 text-center flex items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
-              <p className="font-semibold text-muted-foreground">Checking token balance...</p>
+              <p className="font-semibold text-muted-foreground">Checking coin balance...</p>
             </CardContent>
           </Card>
         )}
 
-        {isWalletConnected && requiredTokenDetails && !isCheckingTokenBalance && !hasRequiredToken && (
+        {isWalletConnected && requiredCoinDetails && !isCheckingCoinBalance && !hasRequiredCoin && (
            <Card className="bg-destructive/10 border-destructive/30 shadow-lg">
             <CardContent className="pt-6 text-center">
               <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-2" />
-              <p className="font-semibold">You don't have the required <span className="text-primary">{requiredTokenDetails.name}</span>.</p>
-              <Button variant="link" className="mt-2 text-accent hover:text-primary" onClick={() => alert(`Redirect to buy ${requiredTokenDetails.symbol}`)}>
-                <DollarSign className="mr-2 h-4 w-4" /> Acquire Token
+              <p className="font-semibold">You don't have the required <span className="text-primary">{requiredCoinDetails.name}</span>.</p>
+              <Button variant="link" className="mt-2 text-accent hover:text-primary" onClick={() => alert(`Redirect to buy ${requiredCoinDetails.symbol}`)}>
+                <DollarSign className="mr-2 h-4 w-4" /> Acquire Coin
               </Button>
             </CardContent>
           </Card>
         )}
-         {isWalletConnected && requiredTokenDetails && !isCheckingTokenBalance && hasRequiredToken && (
+         {isWalletConnected && requiredCoinDetails && !isCheckingCoinBalance && hasRequiredCoin && (
            <Card className="bg-green-500/10 border-green-500/30 shadow-lg">
             <CardContent className="pt-6 text-center flex items-center justify-center">
               <CheckCircle className="h-6 w-6 text-green-400 mr-2" />
-              <p className="font-semibold text-green-400">You hold the required token!</p>
+              <p className="font-semibold text-green-400">You hold the required coin!</p>
             </CardContent>
           </Card>
         )}
-         {!requiredTokenDetails && !isLoadingCreator && ( // Show if no tokens are set up by creator
+         {!requiredCoinDetails && !isLoadingCreator && ( // Show if no coins are set up by creator
              <Card className="bg-muted/20 border-border shadow-md">
                 <CardContent className="pt-6 text-center">
                     <Info className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="font-semibold text-muted-foreground">This creator has not set up any specific tokens for booking yet.</p>
+                    <p className="font-semibold text-muted-foreground">This creator has not set up any specific coins for booking yet.</p>
                 </CardContent>
             </Card>
         )}
@@ -512,7 +512,7 @@ export default function BookingPage() {
                       onClick={(e) => { e.stopPropagation(); handleBookSlot(slot); }}
                       variant={selectedSlot?.start.toISOString() === slot.start.toISOString() ? "default" : "outline"} 
                       size="sm"
-                      disabled={!isWalletConnected || (!!requiredTokenDetails && !hasRequiredToken) || isBookingInProgress || isCheckingTokenBalance}
+                      disabled={!isWalletConnected || (!!requiredCoinDetails && !hasRequiredCoin) || isBookingInProgress || isCheckingCoinBalance}
                     >
                       {isBookingInProgress && selectedSlot?.start.toISOString() === slot.start.toISOString() ? <Loader2 className="h-4 w-4 animate-spin" /> : (selectedSlot?.start.toISOString() === slot.start.toISOString() ? "Confirm Booking" : "Book Slot")}
                     </Button>

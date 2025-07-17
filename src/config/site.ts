@@ -19,7 +19,7 @@ export type SiteConfig = {
 
 export const siteConfig: SiteConfig = {
   name: "Aion",
-  description: "Mint ERC-20 tokens for time-based access and book sessions with creators.",
+  description: "Mint ERC-20 coins for time-based access and book sessions with creators.",
   url: "https://aion.example.com", // Replace with actual URL
   ogImage: "https://aion.example.com/og.png", // Replace with actual OG image
   links: {
@@ -47,7 +47,7 @@ export const siteConfig: SiteConfig = {
       href: "/dashboard/profile",
     },
     {
-      title: "Mint Token",
+      title: "Mint Coin",
       href: "/mint",
     },
   ],

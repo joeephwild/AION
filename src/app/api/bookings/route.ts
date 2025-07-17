@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
         id: docSnap.id,
         creatorId: data.creatorId,
         clientId: data.clientId,
-        tokenId: data.tokenId,
+        coinId: data.coinId,
         startTime: (data.startTime as Timestamp).toDate(),
         endTime: (data.endTime as Timestamp).toDate(),
         status: data.status,
@@ -62,9 +62,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { creatorId, tokenId, startTime, endTime } = body;
+    const { creatorId, coinId, startTime, endTime } = body;
 
-    if (!creatorId || !tokenId || !startTime || !endTime) {
+    if (!creatorId || !coinId || !startTime || !endTime) {
       return NextResponse.json({ success: false, message: 'Missing required booking fields' }, { status: 400 });
     }
 
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     const newBookingData = {
       creatorId,
       clientId,
-      tokenId,
+      coinId,
       startTime: Timestamp.fromDate(startTimeDate),
       endTime: Timestamp.fromDate(endTimeDate),
       status: 'confirmed' as Booking['status'],
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
         id: docRef.id,
         creatorId: newBookingData.creatorId,
         clientId: newBookingData.clientId,
-        tokenId: newBookingData.tokenId,
+        coinId: newBookingData.coinId,
         startTime: startTimeDate,
         endTime: endTimeDate,
         status: newBookingData.status,
